@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include "executable.h"
 #include "processmanager.h"
 #define FORWARD_SLASH 0x2f
@@ -21,7 +22,7 @@ _BOOL isExecutable(char* cmd){
 **/
 static void process_arguments(char** arguments,TOKENS* tkns){
   int index=0;
-  char* current_token="";
+  char* current_token=testTokenNextCommand(tkns);
   //look at the next token
   for(;current_token!=NULL;current_token=testTokenNextCommand(tkns))
     //if it isn't an internal command or meta symbol it's an arg
@@ -61,20 +62,54 @@ _BOOL execute(char* cmd, TOKENS* tkns){
   //look for a meta command next the args or exe
   char* possible_meta="";
   int background = FALSE;
-  if((possible_meta=testTokenNextCommand(tkns))!=NULL){
-    if(isMetaSymbol(possible_meta)){
+  int new_std_in = -1;
+  int new_std_out = -1;
+  while((possible_meta=testTokenNextCommand(tkns))!=NULL&&isMetaSymbol(possible_meta) ){
+
       //if its a & execute it as a background process
       if(strcmp(possible_meta,"&")==0){
         printf("backgrounding %s %d\n",proc->name,proc->pid);
         background=TRUE;
         getTokenNextCommand(tkns);
       }
-    }
+
+      else if(strcmp(possible_meta,"<")==0){
+        getTokenNextCommand(tkns);
+        char* ioredir ="";
+        if((ioredir=getTokenNextCommand(tkns))==NULL)
+          return FALSE;
+        if(access(ioredir,R_OK)==-1)
+          return FALSE;
+
+        new_std_in = open(ioredir,O_RDONLY);
+
+      }
+
+      else if(strcmp(possible_meta,">")==0){
+        getTokenNextCommand(tkns);
+        char* ioredir ="";
+        if((ioredir=getTokenNextCommand(tkns))==NULL)
+          return FALSE;
+        if(access(ioredir,W_OK)==-1)
+          new_std_out = open(ioredir,O_CREAT | O_RDWR,0666);
+        else
+          new_std_out = open(ioredir,O_WRONLY);
+        //printf("%d\n",new_std_out);
+      }
+
   }
 
   int pid;
   //set child image
   if((pid=fork())==0){
+    if(new_std_in!=-1)
+      dup2(new_std_in,0);
+    if(new_std_out!=-1)
+      dup2(new_std_out,1);
+
+
+
+
     execv(cmd,arguments);
     proc->status = DONE;
     exit(0);
