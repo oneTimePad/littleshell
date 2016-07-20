@@ -8,7 +8,6 @@
 #define FORWARD_SLASH 0x2f
 #define MAX_ARGUMENT 4000
 
-extern PMANAGER pman;
 /**
 * determines if the string points to an executable file
 **/
@@ -16,6 +15,10 @@ _BOOL isExecutable(char* cmd){
   if(access(cmd,X_OK)==-1) return FALSE;
   return TRUE;
 }
+
+
+
+
 
 /**
 *extracts arguments for executable
@@ -38,38 +41,25 @@ static void process_arguments(char** arguments,TOKENS* tkns){
 **/
 _BOOL execute(char* cmd, TOKENS* tkns){
   //set process structure
-  PROCESS* proc = &pman.procs[pman.num_procs++];
-  proc->pid = pman.num_procs-1;
-  proc->status = ACTIVE;
 
-  //get exe canonical name
-  int start = 0;
-  char* tmp_p = cmd;
-  for(;*tmp_p!=NULL_TERM;tmp_p++){
-    if(*tmp_p==FORWARD_SLASH)
-      start=tmp_p-cmd+1;
-
-  }
-  //copy the name as an arg and into process struct
-  int buffer_size = strlen(cmd)-start+2;
-  char exe_name[buffer_size];
-  strncpy(exe_name,tmp_p+start,buffer_size);
-  strncpy(proc->name,exe_name,buffer_size);
+  OPROCESS proc;
+  strncpy(proc.name,cmd,strlen(cmd));
   char* arguments[MAX_ARGUMENT];
   //the name is the first arg
-  arguments[0]=exe_name;
+  arguments[0]=cmd;
   process_arguments(arguments,tkns);
   //look for a meta command next the args or exe
   char* possible_meta="";
   int background = FALSE;
   int new_std_in = -1;
   int new_std_out = -1;
+  proc.ground = FORE;
   while((possible_meta=testTokenNextCommand(tkns))!=NULL&&isMetaSymbol(possible_meta) ){
 
       //if its a & execute it as a background process
       if(strcmp(possible_meta,"&")==0){
-        printf("backgrounding %s %d\n",proc->name,proc->pid);
-        background=TRUE;
+        //printf("backgrounding %s %d\n",proc->name,proc->pid);
+        proc.ground = BACK;
         getTokenNextCommand(tkns);
       }
 
@@ -94,9 +84,14 @@ _BOOL execute(char* cmd, TOKENS* tkns){
           new_std_out = open(ioredir,O_CREAT | O_RDWR,0666);
         else
           new_std_out = open(ioredir,O_WRONLY);
-        //printf("%d\n",new_std_out);
+
       }
 
+  }
+
+  if(!process_init(&proc)){
+    perror("process_init()");
+    return FALSE;
   }
 
   int pid;
@@ -106,20 +101,16 @@ _BOOL execute(char* cmd, TOKENS* tkns){
       dup2(new_std_in,0);
     if(new_std_out!=-1)
       dup2(new_std_out,1);
-
-
-
-
     execv(cmd,arguments);
-    proc->status = DONE;
+    process_destroy(&proc);
     exit(0);
   }
-  else{
+  else
     //if it's not a background process wait on it
-      if(!background){
+      if(!proc.ground)
         while(wait()!=-1);
-      }
-    }
+
+
   return TRUE;
 
 }
