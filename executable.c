@@ -102,6 +102,7 @@ _BOOL execute(char* cmd, TOKENS* tkns){
     if(new_std_out!=-1)
       dup2(new_std_out,1);
     execv(cmd,arguments);
+    printf("am i here?\n");
     process_destroy(&proc);
     exit(0);
   }

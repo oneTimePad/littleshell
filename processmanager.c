@@ -15,6 +15,7 @@ void bgProcessHandler(int sig){
     int status;
     //clean up PCB for all dead process fg or bg
     while(waitpid(-1,&status,WNOHANG)!=-1);
+
 }
 
 /**
@@ -48,6 +49,7 @@ _BOOL process_destroy(OPROCESS* oproc){
   pthread_mutex_lock(&ptr->mutex);
   PROCESS* proc = &ptr->procs[oproc->pid];
   proc->status =DONE;
+  printf("KILLING!\n");
   memset(proc->name,0,MAX_PROCESS_NAME);
   pthread_mutex_unlock(&ptr->mutex);
   mmrelease(ptr,sizeof(PMANAGER));

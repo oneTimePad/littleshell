@@ -57,6 +57,7 @@ int main(){
 
   memset(&action,0,sizeof(action));
   action.sa_handler = &bgProcessHandler;
+  action.sa_flags = SA_RESTART;
 
 
   if(sigaction(SIGCHLD,&action,NULL)<0){
@@ -85,22 +86,38 @@ int main(){
   mmrelease(ptr,sizeof(PMANAGER));
   ptr = NULL;
 
-  int bytes_in=0;
-  size_t nbytes=0;
-  char *input_buf = NULL;
+
   while(1){
+    int bytes_in=0;
+    size_t nbytes=0;
+    char *input_buf = NULL;
     printf("%s","LOLZ> ");
     int bytes_read = (int)getline(&input_buf,&nbytes,stdin);
+    fflush(stdin);
     TOKENS* curr_tkn;
+    printf("%d\n", bytes_read);
 
-    if(!initializeTokens(&curr_tkn,input_buf,bytes_read)){
+    if(bytes_read==-1){
       continue;
     }
+    if(!initializeTokens(&curr_tkn,input_buf,bytes_read)){
+
+      continue;
+
+    }
+
+
+
 
     char * str;
     while((str=getTokenNextCommand(curr_tkn))!=NULL){
       if(isExecutable(str)){
         execute(str,curr_tkn);
+      }
+      else if(isInternalCommand(str)){
+        if(strcmp(str,"jobs")==0){
+          process_dump();
+        }
       }
       else{
         printf("%s: command not found\n",str);
@@ -108,6 +125,7 @@ int main(){
 
     }
     destroyTokens(curr_tkn);
+
   }
 
   return 0;

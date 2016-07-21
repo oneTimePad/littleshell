@@ -41,4 +41,7 @@ void* mminit(const char * f_shm, size_t length){
 void mmrelease(void* mem_ptr,size_t length){
     if(mem_ptr == NULL) return;
     munmap(mem_ptr,length);
+
+
+
 }
