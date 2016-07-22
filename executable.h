@@ -1,9 +1,10 @@
 
-#include "bool.h"
-#include "tokenizer.h"
 #ifndef _EXEC
 #define _EXEC
-_BOOL isExecutable(char* cmd);
-static void process_arguments(char** arguments,TOKENS* tkns);
-_BOOL execute(char* cmd, TOKENS* tkns);
+#include "bool.h"
+#include "tokenizer.h"
+#include "processmanager.h"
+_BOOL isExecutable(char* );
+static void process_arguments(char** ,TOKENS* );
+_BOOL execute(PMANAGER*,char*, TOKENS*);
 #endif

@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include "executable.h"
-#include "processmanager.h"
 #define FORWARD_SLASH 0x2f
 #define MAX_ARGUMENT 4000
 
 /**
 * determines if the string points to an executable file
+* cmd: token to test
+* returns: whether it is an executable
 **/
 _BOOL isExecutable(char* cmd){
   if(access(cmd,X_OK)==-1) return FALSE;
@@ -17,11 +18,10 @@ _BOOL isExecutable(char* cmd){
 }
 
 
-
-
-
 /**
 *extracts arguments for executable
+* arguments: a string of arguments to program
+* tkns: tkns struct ptr
 **/
 static void process_arguments(char** arguments,TOKENS* tkns){
   int index=0;
@@ -38,59 +38,70 @@ static void process_arguments(char** arguments,TOKENS* tkns){
 
 /**
 *execute the executable in a new process
+*pman: ptr to process manager
+*cmd: name of program to execute
+*tkns: ptr to tokens struct
+*returns: status of success
 **/
-_BOOL execute(char* cmd, TOKENS* tkns){
-  //set process structure
+_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
 
-  OPROCESS proc;
-  strncpy(proc.name,cmd,strlen(cmd));
   char* arguments[MAX_ARGUMENT];
   //the name is the first arg
   arguments[0]=cmd;
   process_arguments(arguments,tkns);
   //look for a meta command next the args or exe
   char* possible_meta="";
-  int background = FALSE;
+
+  //file descriptor for I/O redirection
   int new_std_in = -1;
   int new_std_out = -1;
-  proc.ground = FORE;
+  //boolean of whether the process will background
+  int background = FALSE;
+
+  //look for a meta token
   while((possible_meta=testTokenNextCommand(tkns))!=NULL&&isMetaSymbol(possible_meta) ){
 
       //if its a & execute it as a background process
       if(strcmp(possible_meta,"&")==0){
-        //printf("backgrounding %s %d\n",proc->name,proc->pid);
-        proc.ground = BACK;
+        background = TRUE;
         getTokenNextCommand(tkns);
       }
-
+      //if it's a < redirect standard input
       else if(strcmp(possible_meta,"<")==0){
+
         getTokenNextCommand(tkns);
         char* ioredir ="";
+        //get file to open
         if((ioredir=getTokenNextCommand(tkns))==NULL)
           return FALSE;
         if(access(ioredir,R_OK)==-1)
           return FALSE;
-
         new_std_in = open(ioredir,O_RDONLY);
-
       }
-
+      //if it's a > redirect standard output
       else if(strcmp(possible_meta,">")==0){
         getTokenNextCommand(tkns);
         char* ioredir ="";
+        //open the file to write output too
         if((ioredir=getTokenNextCommand(tkns))==NULL)
           return FALSE;
-        if(access(ioredir,W_OK)==-1)
+        //if it doesn't exist create it
+        if(access(ioredir,F_OK)==-1&&access(ioredir,W_OK)==-1)
           new_std_out = open(ioredir,O_CREAT | O_RDWR,0666);
+        //we don't have write access to the file, but it does exist
+        else if(access(ioredir,F_OK)!=-1)
+          return FALSE;
+        //we are good
         else
           new_std_out = open(ioredir,O_WRONLY);
-
       }
 
   }
 
-  if(!process_init(&proc)){
-    perror("process_init()");
+  // set up pipe (used for following child process death)
+  int pipe_ends[2];
+  if(pipe(pipe_ends)==-1){
+    perror("pipe()");
     return FALSE;
   }
 
@@ -101,16 +112,22 @@ _BOOL execute(char* cmd, TOKENS* tkns){
       dup2(new_std_in,0);
     if(new_std_out!=-1)
       dup2(new_std_out,1);
+    //close unused end
+    close(pipe_ends[0]);
+    //start
     execv(cmd,arguments);
-    printf("am i here?\n");
-    process_destroy(&proc);
-    exit(0);
   }
-  else
-    //if it's not a background process wait on it
-      if(!proc.ground)
+  else{
+    //parent
+    //initialize process in table
+    if(!process_init(pman,cmd,pid,pipe_ends,background)){
+      perror("process_init()");
+      return FALSE;
+    }
+    //if it's not a background proc, wait for it
+    if(!background)
         while(wait()!=-1);
-
+  }
 
   return TRUE;
 

@@ -12,12 +12,12 @@
 #include "tokenizer.h"
 #include "executable.h"
 #include "processmanager.h"
-#include "shmhandler.h"
 
 
-char* f_shm = "./shm.seg";
-
-
+struct _pman_stdout_lock{
+  PMANAGER pman;
+  pthread_mutex_t stdout_lock;
+};
 
 
 
@@ -47,44 +47,48 @@ _BOOL isMetaSymbol(char* cmd){
 }
 
 
+void process_clean(struct _pman_stdout_lock* arg){
+  while(1){
+    process_cleanup(&arg->pman,&arg->stdout_lock);
+  }
+}
 
 
 
 int main(){
 
 
-  struct sigaction action;
-
-  memset(&action,0,sizeof(action));
-  action.sa_handler = &bgProcessHandler;
-  action.sa_flags = SA_RESTART;
 
 
-  if(sigaction(SIGCHLD,&action,NULL)<0){
-    perror("sigaction");
+  struct _pman_stdout_lock * ptr = (struct _pman_stdout_lock*)malloc(sizeof(struct _pman_stdout_lock));
+  if(ptr == NULL){
+    perror("malloc()");
+    return errno;
+  }
+
+  PMANAGER* pman = &ptr->pman;
+  pthread_mutex_t* stdout_lock = &ptr->stdout_lock;
+
+  if(!process_manager_init(pman)){
+    printf("process table initialization failed\n");
     exit(1);
   }
 
-  if(access(f_shm,F_OK)!=-1){
-    remove(f_shm);
-  }
-
-  PMANAGER* ptr;
-  if((ptr=mminit(f_shm,(size_t)sizeof(PMANAGER)))==NULL)
-    return errno;
-
-  pthread_mutexattr_t attr;
-  if(pthread_mutexattr_setpshared(&attr,PTHREAD_PROCESS_SHARED)!=0){
-    perror("pthread_mutexattr_setpshared()");
-    return errno;
-  }
-
-  if(pthread_mutex_init(&(ptr->mutex),&attr)!=0){
+  if(pthread_mutex_init(stdout_lock,NULL)!=0){
     perror("pthread_mutex_init()");
     return errno;
   }
-  mmrelease(ptr,sizeof(PMANAGER));
-  ptr = NULL;
+  pthread_t clean_thread;
+  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_cleanup,ptr)!=0){
+    perror("pthread_create()");
+    return errno;
+  }
+
+
+
+
+
+
 
 
   while(1){
@@ -95,7 +99,7 @@ int main(){
     int bytes_read = (int)getline(&input_buf,&nbytes,stdin);
     fflush(stdin);
     TOKENS* curr_tkn;
-    printf("%d\n", bytes_read);
+
 
     if(bytes_read==-1){
       continue;
@@ -107,16 +111,14 @@ int main(){
     }
 
 
-
-
     char * str;
     while((str=getTokenNextCommand(curr_tkn))!=NULL){
       if(isExecutable(str)){
-        execute(str,curr_tkn);
+        execute(pman,str,curr_tkn);
       }
       else if(isInternalCommand(str)){
         if(strcmp(str,"jobs")==0){
-          process_dump();
+          process_dump(pman,stdout_lock);
         }
       }
       else{

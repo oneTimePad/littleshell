@@ -1,72 +1,126 @@
 #include "processmanager.h"
-#include "shmhandler.h"
-#include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 
-extern char* f_shm;
+/**
+Managers process data structure creation and clean up
+**/
+
 
 /**
-* need to make sure children are cleaned up
+* initialize process table
+* pman: ptr to process manager structure
+* returns: status of success
 **/
-void bgProcessHandler(int sig){
-    int status;
-    //clean up PCB for all dead process fg or bg
-    while(waitpid(-1,&status,WNOHANG)!=-1);
+_BOOL process_manager_init(PMANAGER* pman){
+    if(pman == NULL) return FALSE;
+    int i =0;
+    for(;i<MAX_PROCESSES;i++){
+      pman->processpids[i]=-1;
+      pman->procspipe[i].fd=-1;
+    }
+
+    if(pthread_mutex_init(&(pman->mutex),NULL)!=0){
+      perror("pthread_mutex_init()");
+      return FALSE;
+    }
+
+    return TRUE;
+}
+
+
+/**
+* initializes process in process table
+* pman: ptr to process manager
+* name: name of process image
+* pid: process id
+* ground: process is fore or background
+* returns: status of success
+**/
+_BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int ground){
+  pthread_mutex_lock(&pman->mutex);
+  //look for unused process entry
+  int i =0;
+  for(;i<MAX_PROCESSES;i++)
+    if(pman->processpids[i]==-1)
+      break;
+
+  int read_end = pipe_ends[0];
+  int write_end = pipe_ends[1];
+
+  close(write_end);
+  //set pipe fd to poll on
+  pman->procspipe[i].fd = read_end;
+  //set process image name
+  int name_length = strlen(name);
+  strncpy(pman->processnames[i],name,name_length);
+  pman->processnames[i][name_length]=0x0;
+  pman->processpids[i] = pid;
+  pman->groundstatus[i] = ground;
+  pthread_mutex_unlock(&pman->mutex);
+  return TRUE;
+}
+
+/**
+* clean up process entry on death
+* pman: ptr to process manager
+* proc_index: index in process table
+**/
+static void process_destroy(PMANAGER* pman,int proc_index){
+
+  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
+  pman->processpids[proc_index] = -1;
+  pman->procspipe[proc_index].fd = -1;
+}
+
+
+/**
+* ran in separate thread. look for dead processes to clean up
+* pman: ptr to process manager
+**/
+void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
+
+    //notified when child closes pipe write end
+    int status = poll(pman->procspipe,MAX_PROCESSES,0);
+    if(status>0){
+      int i =0;
+      pthread_mutex_lock(&pman->mutex);
+      for(;i<MAX_PROCESSES;i++){
+        //if child closed pipe write end
+        if((pman->procspipe[i].revents & POLLHUP)!=0){
+          //clean up
+          int status;
+          waitpid(pman->processpids[i],&status,WNOHANG);
+
+          // if it is background, send a msg to stdout
+          if(pman->groundstatus[i]==BACK){
+            pthread_mutex_lock(stdout_lock);
+            printf("DONE: %s\n",pman->processnames[i]);
+            pthread_mutex_unlock(stdout_lock);
+          }
+          process_destroy(pman,i);
+
+        }
+      }
+      pthread_mutex_unlock(&pman->mutex);
+    }
 
 }
 
 /**
-* initialize a process structure for shell
-*args: oproc: external(outer) process structure for describing proc initialization and description
+* prints out a list of active processes
+* pman: ptr to process manager
 **/
-_BOOL process_init(OPROCESS* oproc){
-  PMANAGER* ptr;
-  //initialize shm map
-  if((ptr=(PMANAGER*)mminit(f_shm,sizeof(PMANAGER)))==NULL)
-    return FALSE;
-  //access shm
-  pthread_mutex_lock(&ptr->mutex);
-  //created internal process structure
-  PROCESS* proc = &ptr->procs[ptr->num_procs++];
-  strncpy(proc->name,oproc->name,strlen(oproc->name));
-  proc->ground = oproc->ground;
-  proc->pid = ptr->num_procs-1;
-  proc->status = ACTIVE;
-  //set external process structure
-  oproc->pid = proc->pid;
-  pthread_mutex_unlock(&ptr->mutex);
-  mmrelease(ptr,sizeof(PMANAGER));
-  return TRUE;
-}
+void process_dump(PMANAGER* pman, pthread_mutex_t* stdout_lock){
 
-_BOOL process_destroy(OPROCESS* oproc){
-  PMANAGER* ptr;
-  if((ptr=(PMANAGER*)mminit(f_shm,sizeof(PMANAGER)))==NULL)
-    return FALSE;
-  pthread_mutex_lock(&ptr->mutex);
-  PROCESS* proc = &ptr->procs[oproc->pid];
-  proc->status =DONE;
-  printf("KILLING!\n");
-  memset(proc->name,0,MAX_PROCESS_NAME);
-  pthread_mutex_unlock(&ptr->mutex);
-  mmrelease(ptr,sizeof(PMANAGER));
-  return TRUE;
-}
-
-_BOOL process_dump(void){
-  PMANAGER* ptr;
-  if((ptr=(PMANAGER*)mminit(f_shm,sizeof(PMANAGER)))==NULL)
-    return FALSE;
-  pthread_mutex_lock(&ptr->mutex);
-  PROCESS* procs = ptr->procs;
-  int pid =0;
-  for(;pid<MAX_PROCESS_ID;pid++)
-    if(procs[pid].status == ACTIVE)
-      printf("JOB: %d NAME %s",pid,procs[pid].name);
-  pthread_mutex_unlock(&ptr->mutex);
-  mmrelease(ptr,sizeof(PMANAGER));
-  return TRUE;
+  pthread_mutex_lock(&pman->mutex);
+  int i = 0;
+  pthread_mutex_lock(stdout_lock);
+  for(;i<MAX_PROCESSES;i++)
+    if(pman->processpids[i]!=-1)
+      printf("JOB: %d NAME: %s\n",pman->processpids[i],pman->processnames[i]);
+  pthread_mutex_unlock(stdout_lock);
+  pthread_mutex_unlock(&pman->mutex);
 }

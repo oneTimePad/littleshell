@@ -1,38 +1,31 @@
 #ifndef _PROCMAN
 #define _PROCMAN
-#define MAX_PROCESS_ID 3000
+#define MAX_PROCESSES 3000
 #define MAX_PROCESS_NAME 100
+#include <poll.h>
 #include <pthread.h>
 #include "bool.h"
 
-typedef enum{DONE,ACTIVE} _PROCESS_STATUS;
-typedef enum{FORE,BACK} _GROUND;
+typedef enum {FORE , BACK} _GROUND;
 
-//describes a process
-typedef struct _PROCESS{
-  int pid;
-  _PROCESS_STATUS status;
-  _GROUND ground;
-  char name[MAX_PROCESS_NAME];
-
-} PROCESS;
-//external process description
-typedef struct _OPROCESS{
-  int pid;
-  _GROUND ground;
-  char name[MAX_PROCESS_NAME];
-} OPROCESS;
-
-//contains a list of processes
+// manages processes
 typedef struct _PMANAGER{
-  int num_procs;
-  PROCESS procs[MAX_PROCESS_ID];
+  // contains the name of image process is running
+  char processnames[MAX_PROCESS_NAME][MAX_PROCESSES];
+  // contains a list of process pid's
+  pid_t processpids[MAX_PROCESSES];
+  // list of which processes are background and foreground
+  _GROUND groundstatus[MAX_PROCESSES];
+  // list of pipe read file descriptors to poll on, determines if child died
+  struct pollfd procspipe[MAX_PROCESSES];
+  //synchronize tables
   pthread_mutex_t mutex;
 } PMANAGER;
 
-_BOOL process_init(OPROCESS* oproc);
-_BOOL process_destroy(OPROCESS* oproc);
-_BOOL process_dump(void);
-void bgProcessHandler(int sig);
+_BOOL process_manager_init(PMANAGER*);
+_BOOL process_init(PMANAGER*,char*,pid_t, int*, int);
+static void process_destroy(PMANAGER*,int);
+void process_cleanup(PMANAGER*,pthread_mutex_t*);
+void process_dump(PMANAGER*,pthread_mutex_t*);
 
 #endif
