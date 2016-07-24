@@ -113,9 +113,12 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
     if(new_std_out!=-1)
       dup2(new_std_out,1);
     //close unused end
+
     close(pipe_ends[0]);
+
     //start
     execv(cmd,arguments);
+    exit(0);
   }
   else{
     //parent

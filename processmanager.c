@@ -1,8 +1,10 @@
 #include "processmanager.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <errno.h>
 
 /**
 Managers process data structure creation and clean up
@@ -53,6 +55,10 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int grou
   close(write_end);
   //set pipe fd to poll on
   pman->procspipe[i].fd = read_end;
+
+  pman->procspipe[i].events = POLLHUP;
+
+
   //set process image name
   int name_length = strlen(name);
   strncpy(pman->processnames[i],name,name_length);
@@ -73,6 +79,7 @@ static void process_destroy(PMANAGER* pman,int proc_index){
   memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
   pman->processpids[proc_index] = -1;
   pman->procspipe[proc_index].fd = -1;
+  pman->procspipe[proc_index].events=-1;
 }
 
 
@@ -83,13 +90,18 @@ static void process_destroy(PMANAGER* pman,int proc_index){
 void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
 
     //notified when child closes pipe write end
+
     int status = poll(pman->procspipe,MAX_PROCESSES,0);
+
     if(status>0){
+
       int i =0;
       pthread_mutex_lock(&pman->mutex);
       for(;i<MAX_PROCESSES;i++){
+
         //if child closed pipe write end
-        if((pman->procspipe[i].revents & POLLHUP)!=0){
+        if(pman->procspipe[i].revents == POLLHUP){
+
           //clean up
           int status;
           waitpid(pman->processpids[i],&status,WNOHANG);
@@ -105,7 +117,9 @@ void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
         }
       }
       pthread_mutex_unlock(&pman->mutex);
+
     }
+
 
 }
 

@@ -1,6 +1,6 @@
 #ifndef _PROCMAN
 #define _PROCMAN
-#define MAX_PROCESSES 3000
+#define MAX_PROCESSES 500
 #define MAX_PROCESS_NAME 100
 #include <poll.h>
 #include <pthread.h>

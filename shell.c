@@ -48,8 +48,11 @@ _BOOL isMetaSymbol(char* cmd){
 
 
 void process_clean(struct _pman_stdout_lock* arg){
+
   while(1){
+
     process_cleanup(&arg->pman,&arg->stdout_lock);
+
   }
 }
 
@@ -79,7 +82,7 @@ int main(){
     return errno;
   }
   pthread_t clean_thread;
-  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_cleanup,ptr)!=0){
+  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_clean,ptr)!=0){
     perror("pthread_create()");
     return errno;
   }
