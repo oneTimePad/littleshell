@@ -2,11 +2,21 @@
 #define _PROCMAN
 #define MAX_PROCESSES 500
 #define MAX_PROCESS_NAME 100
+#define MAX_ARGUMENT 10
 #include <poll.h>
 #include <pthread.h>
 #include "bool.h"
 
 typedef enum {FORE , BACK} _GROUND;
+
+//used for storing info on a process to be created
+typedef struct _EMBRYO_PROCESS{
+
+  char* arguments[MAX_ARGUMENT];
+  int p_stdin;
+  int p_stdout;
+  int background;
+} EMBRYO;
 
 // manages processes
 typedef struct _PMANAGER{

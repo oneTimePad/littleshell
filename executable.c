@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include "executable.h"
-#define FORWARD_SLASH 0x2f
-#define MAX_ARGUMENT 4000
+
+
 
 /**
 * determines if the string points to an executable file
@@ -24,31 +24,31 @@ _BOOL isExecutable(char* cmd){
 * tkns: tkns struct ptr
 **/
 static void process_arguments(char** arguments,TOKENS* tkns){
-  int index=0;
+  int index=1;
   char* current_token=testTokenNextCommand(tkns);
   //look at the next token
   for(;current_token!=NULL;current_token=testTokenNextCommand(tkns))
     //if it isn't an internal command or meta symbol it's an arg
-    if(!isMetaSymbol(current_token)&&!isInternalCommand(current_token)&&index+2<4000)
+    if(!isMetaSymbol(current_token)&&!isInternalCommand(current_token)&&index+2<MAX_ARGUMENT)
         arguments[index++]=getTokenNextCommand(tkns);
     else
       break;
   arguments[index] = NULL;
 }
 
-/**
-*execute the executable in a new process
-*pman: ptr to process manager
-*cmd: name of program to execute
-*tkns: ptr to tokens struct
-*returns: status of success
-**/
-_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
 
-  char* arguments[MAX_ARGUMENT];
+/**
+* initialiazes a structure containg process information
+* pman: ptr to process manager
+* process_name : name of process image to execute
+* proc: ptr to EMBRYO structure (output)
+* pipe_stdin: pointer to a pipe read end
+**/
+_BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_stdin,TOKENS* tkns){
+
   //the name is the first arg
-  arguments[0]=cmd;
-  process_arguments(arguments,tkns);
+  proc->arguments[0]=process_name;
+  process_arguments(proc->arguments,tkns);
   //look for a meta command next the args or exe
   char* possible_meta="";
 
@@ -56,14 +56,15 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
   int new_std_in = -1;
   int new_std_out = -1;
   //boolean of whether the process will background
-  int background = FALSE;
-
-  //look for a meta token
-  while((possible_meta=testTokenNextCommand(tkns))!=NULL&&isMetaSymbol(possible_meta) ){
+  proc->background = FALSE;
+  if(pipe_stdin!=-1)
+    new_std_in=pipe_stdin;
+  //look for a meta token (except pipe)
+  while((possible_meta=testTokenNextCommand(tkns))!=NULL&&isMetaSymbol(possible_meta) && strcmp(possible_meta,"|")!=0 ){
 
       //if its a & execute it as a background process
       if(strcmp(possible_meta,"&")==0){
-        background = TRUE;
+        proc->background = TRUE;
         getTokenNextCommand(tkns);
       }
       //if it's a < redirect standard input
@@ -96,41 +97,123 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
           new_std_out = open(ioredir,O_WRONLY);
       }
 
-  }
+    }
 
-  // set up pipe (used for following child process death)
-  int pipe_ends[2];
-  if(pipe(pipe_ends)==-1){
-    perror("pipe()");
+    proc->p_stdin = new_std_in;
+    proc->p_stdout = new_std_out;
+    return TRUE;
+
+}
+
+
+
+
+/**
+*execute the executable in a new process
+*pman: ptr to process manager
+*cmd: name of program to execute
+*tkns: ptr to tokens struct
+*returns: status of success
+**/
+_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
+
+  //info for all processes to be created
+  EMBRYO new_proc[MAX_PROCESSES];
+
+  //prepare info for the first process
+  if(!prepare_process(pman,cmd,new_proc,-1,tkns)){
+    perror("prepare_process()");
     return FALSE;
   }
-
-  int pid;
-  //set child image
-  if((pid=fork())==0){
-    if(new_std_in!=-1)
-      dup2(new_std_in,0);
-    if(new_std_out!=-1)
-      dup2(new_std_out,1);
-    //close unused end
-
-    close(pipe_ends[0]);
-
-    //start
-    execv(cmd,arguments);
-    exit(0);
-  }
-  else{
-    //parent
-    //initialize process in table
-    if(!process_init(pman,cmd,pid,pipe_ends,background)){
-      perror("process_init()");
+  //number of processes in the pipe
+  int num_procs_in_pipe = 1;
+  //while there is a still a pipe
+  char* possible_pipe ="";
+  while((possible_pipe=testTokenNextCommand(tkns))!=NULL && strcmp(possible_pipe,"|")==0){
+    getTokenNextCommand(tkns);
+    //if the next program after the pipe is not valid
+    char* second_prog ="";
+    if((second_prog=testTokenNextCommand(tkns))==NULL || ! isExecutable(second_prog)){
+      perror("execute()");
       return FALSE;
     }
-    //if it's not a background proc, wait for it
-    if(!background)
-        while(wait()!=-1);
+    getTokenNextCommand(tkns);
+    //create pipe
+    int pipe_fd_pipe[2];
+    if(pipe(pipe_fd_pipe)==-1){
+      perror("pipe()");
+      return FALSE;
+    }
+    //set first proc in pipe's stdout to write end of pipe
+    new_proc[num_procs_in_pipe-1].p_stdout = pipe_fd_pipe[1];
+    //prepare info for process on the other side of the pipe and set its stdin to the read end of the pipe
+    prepare_process(pman,second_prog,&new_proc[num_procs_in_pipe++],pipe_fd_pipe[0],tkns);
   }
+
+
+  //contains pid of processes to be foregrounded (this might be weird)
+  int num_foregrounds = 0;
+  int foregrounds[MAX_PROCESSES];
+
+  //look through info for all processes to be created
+  EMBRYO* embryos = NULL;
+  int i =0;
+  for(;i<num_procs_in_pipe;i++){
+    embryos = new_proc+i;
+    //pipe for watching child
+    int pipe_ends[2];
+    if(pipe(pipe_ends)==-1){
+      perror("pipe()");
+      return FALSE;
+    }
+
+    int pid;
+    //set child image
+    if((pid=fork())==0){
+      //duplicate std files if necessary
+      if(embryos->p_stdin!=-1){
+        dup2(embryos->p_stdin,0);
+        close(embryos->p_stdin);
+      }
+      if(embryos->p_stdout!=-1){
+        dup2(embryos->p_stdout,1);
+        close(embryos->p_stdout);
+      }
+      //close unused end
+      close(pipe_ends[0]);
+
+      //start
+      if(execv(embryos->arguments[0],embryos->arguments)!=0){
+        perror("execute()");
+        exit(-1);
+      }
+
+    }
+    //parent
+    else{
+      //clean up files if necessary
+      if(embryos->p_stdin!=-1)
+        close(embryos->p_stdin);
+      if(embryos->p_stdout!=-1)
+        close(embryos->p_stdout);
+
+      //initialize process to table
+      if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background)){
+        perror("process_init()");
+        return FALSE;
+      }
+      //put it in the foreground table if it is not a bg process
+      if(!embryos->background)
+        foregrounds[num_foregrounds++]=pid;
+    }
+
+  }
+
+  //clean up all foregrounds
+  i =0;
+  int status;
+  for(;i<num_foregrounds;i++)
+    waitpid(foregrounds[i],&status,NULL);
 
   return TRUE;
 
