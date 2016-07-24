@@ -1,2 +1,2 @@
 # littleshell
-simple shell program
+simple unix shell
