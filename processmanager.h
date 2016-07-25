@@ -28,6 +28,11 @@ typedef struct _PMANAGER{
   _GROUND groundstatus[MAX_PROCESSES];
   // list of pipe read file descriptors to poll on, determines if child died
   struct pollfd procspipe[MAX_PROCESSES];
+  // says if process is currently suspended
+  _BOOL suspendedstatus[MAX_PROCESSES];
+  //process group ids
+  pid_t foreground_group;
+  pid_t background_group;
   //synchronize tables
   pthread_mutex_t mutex;
 } PMANAGER;
@@ -37,5 +42,6 @@ _BOOL process_init(PMANAGER*,char*,pid_t, int*, int);
 static void process_destroy(PMANAGER*,int);
 void process_cleanup(PMANAGER*,pthread_mutex_t*);
 void process_dump(PMANAGER*,pthread_mutex_t*);
+
 
 #endif

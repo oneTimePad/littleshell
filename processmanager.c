@@ -11,6 +11,14 @@ Managers process data structure creation and clean up
 **/
 
 
+
+void process_resume(PMANAGER* pman){
+
+}
+
+
+
+
 /**
 * initialize process table
 * pman: ptr to process manager structure
@@ -23,7 +31,8 @@ _BOOL process_manager_init(PMANAGER* pman){
       pman->processpids[i]=-1;
       pman->procspipe[i].fd=-1;
     }
-
+    pman->foreground_group=-1;
+    pman->background_group=-1;
     if(pthread_mutex_init(&(pman->mutex),NULL)!=0){
       perror("pthread_mutex_init()");
       return FALSE;
@@ -65,6 +74,7 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int grou
   pman->processnames[i][name_length]=0x0;
   pman->processpids[i] = pid;
   pman->groundstatus[i] = ground;
+
   pthread_mutex_unlock(&pman->mutex);
   return TRUE;
 }
@@ -133,8 +143,11 @@ void process_dump(PMANAGER* pman, pthread_mutex_t* stdout_lock){
   int i = 0;
   pthread_mutex_lock(stdout_lock);
   for(;i<MAX_PROCESSES;i++)
-    if(pman->processpids[i]!=-1)
-      printf("JOB: %d NAME: %s\n",pman->processpids[i],pman->processnames[i]);
+    if(pman->processpids[i]!=-1 && pman->suspendedstatus[i])
+      printf("JOB: %d NAME: %s SUSPENDED\n",pman->processpids[i],pman->processnames[i]);
+    else if(pman->processpids[i]!=-1 && !pman->suspendedstatus[i])
+      printf("JOB: %d NAME: %s RUNNING\n",pman->processpids[i],pman->processnames[i]);
+
   pthread_mutex_unlock(stdout_lock);
   pthread_mutex_unlock(&pman->mutex);
 }

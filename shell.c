@@ -16,7 +16,7 @@
 //used so we can pass more than one arg to thread routine
 struct _pman_stdout_lock{
   //process manager
-  PMANAGER pman
+  PMANAGER pman;
   //locks stdout allowing for the two threads to synchronize printf
   pthread_mutex_t stdout_lock;
 };
@@ -50,6 +50,10 @@ _BOOL isMetaSymbol(char* cmd){
   return FALSE;
 }
 
+
+sig_atomic_t sigint_trig = FALSE;
+sig_atomic_t sigstp_trig = FALSE;
+
 /**
 * looks for processes to cleanup, called by separate thread
 * arg: ptr to struct containg the arguments for this routine
@@ -64,7 +68,15 @@ void process_clean(struct _pman_stdout_lock* arg){
 
 
 
+
+
+
+
+
 int main(){
+
+
+
 
 
   //create structure to hold process manager and lock for stdout
@@ -93,14 +105,23 @@ int main(){
     return errno;
   }
 
+  //ignore termination and suspension
+  signal(SIGTSTP,SIG_IGN);
+  signal(SIGINT,SIG_IGN);
 
+  //put shell in foreground
+  tcsetpgrp(0,getpid());
+  pman->foreground_group=getpid();
 //main loop
   while(1){
+
+
     //read use input to shell
     int bytes_in=0;
     size_t nbytes=0;
     char *input_buf = NULL;
     printf("%s","LOLZ> ");
+
     int bytes_read = (int)getline(&input_buf,&nbytes,stdin);
     fflush(stdin);
     TOKENS* curr_tkn;
@@ -120,12 +141,34 @@ int main(){
     while((str=getTokenNextCommand(curr_tkn))!=NULL){
       //if token is an an executable
       if(isExecutable(str)){
-        execute(pman,str,curr_tkn);
+        //fetch the background gpid
+        int backgpid = -1;
+        pthread_mutex_lock(&pman->mutex);
+        backgpid = pman->background_group;
+        pthread_mutex_unlock(&pman->mutex);
+
+        execute(pman,str,curr_tkn,pman->foreground_group,&backgpid,stdout_lock);
+        //edit it since it might have been -1 before
+        pthread_mutex_lock(&pman->mutex);
+        pman->background_group = backgpid;
+        pthread_mutex_unlock(&pman->mutex);
       }
       //if token is an internal command
       else if(isInternalCommand(str)){
         if(strcmp(str,"jobs")==0){
           process_dump(pman,stdout_lock);
+        }
+        else if(strcmp(str,"exit")==0){
+          //terminate all processes
+          int i =0;
+          for(;i<MAX_PROCESSES;i++){
+            if(pman->processpids[i]!=-1){
+              kill(pman->processpids[i],SIGINT);
+            }
+          }
+          destroyTokens(curr_tkn);
+          exit(0);
+
         }
       }
       //unrecognized token
@@ -134,6 +177,7 @@ int main(){
       }
 
     }
+
     //clean up
     destroyTokens(curr_tkn);
   }

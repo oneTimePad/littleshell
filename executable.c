@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <signal.h>
 #include "executable.h"
 
 
@@ -115,7 +116,7 @@ _BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_st
 *tkns: ptr to tokens struct
 *returns: status of success
 **/
-_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
+_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* background_group,pthread_mutex_t* stdout_lock){
 
   //info for all processes to be created
   EMBRYO new_proc[MAX_PROCESSES];
@@ -155,6 +156,9 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
   int num_foregrounds = 0;
   int foregrounds[MAX_PROCESSES];
 
+  //to avoid race disable sigint and sigtstp
+  signal(SIGINT,SIG_BLOCK);
+  signal(SIGTSTP,SIG_BLOCK);
   //look through info for all processes to be created
   EMBRYO* embryos = NULL;
   int i =0;
@@ -167,9 +171,13 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
       return FALSE;
     }
 
+
+
     int pid;
     //set child image
     if((pid=fork())==0){
+      signal(SIGINT,SIG_DFL);
+      signal(SIGTSTP,SIG_DFL);
       //duplicate std files if necessary
       if(embryos->p_stdin!=-1){
         dup2(embryos->p_stdin,0);
@@ -181,6 +189,22 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
       }
       //close unused end
       close(pipe_ends[0]);
+
+      //this setup is done in the parent and child to avoid race-condition
+      //if foreground put it in the foreground group
+      if(!embryos->background){
+        setpgid(getpid(),foreground_group);
+
+      }
+      //if background put it in the background group
+      else{
+        //this might be the first process in this group
+        if(*background_group==-1){
+          *background_group = getpid();
+        }
+        setpgid(getpid(),*background_group);
+
+      }
 
       //start
       if(execv(embryos->arguments[0],embryos->arguments)!=0){
@@ -203,17 +227,57 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns){
         return FALSE;
       }
       //put it in the foreground table if it is not a bg process
-      if(!embryos->background)
+      if(!embryos->background){
         foregrounds[num_foregrounds++]=pid;
+
+        setpgid(pid,foreground_group);
+
+      }
+      //put process in background group
+      else{
+        if(*background_group==-1){
+          *background_group = pid;
+        }
+        setpgid(pid,*background_group);
+
+      }
     }
 
   }
+  //start ignoring them again
+  signal(SIGINT,SIG_IGN);
+  signal(SIGTSTP,SIG_IGN);
 
   //clean up all foregrounds
   i =0;
   int status;
-  for(;i<num_foregrounds;i++)
-    waitpid(foregrounds[i],&status,NULL);
+  for(;i<num_foregrounds;i++){
+    waitpid(foregrounds[i],&status,WUNTRACED);
+    //if process was suspended
+    if(WIFSTOPPED(status)){
+      //if it was the cause of ctl-Z
+      if(WSTOPSIG(status)==SIGTSTP){
+        //set process to paused state
+        pthread_mutex_lock(&pman->mutex);
+        int j =0;
+        for(;j<MAX_PROCESSES;j++){
+          if(pman->processpids[j]==foregrounds[i]){
+            pman->suspendedstatus[j]=TRUE;
+            break;
+          }
+        }
+        pthread_mutex_unlock(&pman->mutex);
+      }
+    }
+    //if process was killed by ctl-C
+    else if(WIFSIGNALED(status)){
+      //print killed message
+      pthread_mutex_lock(stdout_lock);
+      printf("killed\n");
+      pthread_mutex_unlock(stdout_lock);
+    }
+
+  }
 
   return TRUE;
 
