@@ -28,7 +28,7 @@ struct _pman_stdout_lock{
 *returns: status
 **/
 _BOOL isInternalCommand(char* cmd){
-  char* commands[] = {"exit","jobs","echo","fg","bg",NULL};
+  char* commands[] = {"exit","jobs","echo","fg","bg","help",NULL};
   char** tmp_p = commands;
   for(;*tmp_p!=NULL;tmp_p++)
     if(strcmp(*tmp_p,cmd)==0)return TRUE;
@@ -51,8 +51,7 @@ _BOOL isMetaSymbol(char* cmd){
 }
 
 
-sig_atomic_t sigint_trig = FALSE;
-sig_atomic_t sigstp_trig = FALSE;
+
 
 /**
 * looks for processes to cleanup, called by separate thread
@@ -112,6 +111,9 @@ int main(){
   //put shell in foreground
   tcsetpgrp(0,getpid());
   pman->foreground_group=getpid();
+
+  printf("Welcome To littleshell\n \rtype help\n\n");
+
 //main loop
   while(1){
 
@@ -196,6 +198,15 @@ int main(){
             pthread_mutex_unlock(&pman->mutex);
             pthread_mutex_unlock(stdout_lock);
           }
+        }
+
+        else if(strcmp(str,"help")==0){
+          printf("\rexit: close shell\n");
+          printf("\rjobs: list current processes\n");
+          printf("\recho $status: print exit status of last foreground job\n");
+          printf("\rfg <job_id>: run job in foreground(continue)\n");
+          printf("\rbg <job_id>: run job in background\n");
+          printf("\r<executable> <arg1> <arg2> ...\n");
         }
       }
       //unrecognized token
