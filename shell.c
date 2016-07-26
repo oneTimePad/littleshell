@@ -173,14 +173,28 @@ int main(){
 
           pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
           if(!process_foreground(pman,job,stdout_lock)){
+            pthread_mutex_lock(stdout_lock);
             printf("Invalid\n");
+            pthread_mutex_unlock(stdout_lock);
           }
         }
         else if(strcmp(str,"bg")==0){
 
           pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
           if(!process_background(pman,job)){
+            pthread_mutex_lock(stdout_lock);
             printf("Invalid\n");
+            pthread_mutex_unlock(stdout_lock);
+          }
+        }
+
+        else if(strcmp(str,"echo")==0){
+          if(strcmp(getTokenNextCommand(curr_tkn),"$status")==0){
+            pthread_mutex_lock(stdout_lock);
+            pthread_mutex_lock(&pman->mutex);
+            printf("%d\n",pman->recent_foreground_status);
+            pthread_mutex_unlock(&pman->mutex);
+            pthread_mutex_unlock(stdout_lock);
           }
         }
       }

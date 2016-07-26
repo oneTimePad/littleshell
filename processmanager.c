@@ -12,12 +12,6 @@ Managers process data structure creation and clean up
 
 
 
-void process_resume(PMANAGER* pman){
-
-}
-
-
-
 
 /**
 * initialize process table
@@ -33,6 +27,7 @@ _BOOL process_manager_init(PMANAGER* pman){
     }
     pman->foreground_group=-1;
     pman->background_group=-1;
+    pman->recent_foreground_status = 0;
     if(pthread_mutex_init(&(pman->mutex),NULL)!=0){
       perror("pthread_mutex_init()");
       return FALSE;
@@ -83,6 +78,9 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int grou
 void process_trace(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
     int status;
   waitpid(job,&status,WUNTRACED);
+  pthread_mutex_lock(&pman->mutex);
+  pman->recent_foreground_status = status;
+  pthread_mutex_unlock(&pman->mutex);
   //if process was suspended
   if(WIFSTOPPED(status)){
     //if it was the cause of ctl-Z

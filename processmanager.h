@@ -33,6 +33,9 @@ typedef struct _PMANAGER{
   //process group ids
   pid_t foreground_group;
   pid_t background_group;
+
+  //return status of most recent foreground process
+  int recent_foreground_status;
   //synchronize tables
   pthread_mutex_t mutex;
 } PMANAGER;
