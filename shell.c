@@ -120,7 +120,7 @@ int main(){
     int bytes_in=0;
     size_t nbytes=0;
     char *input_buf = NULL;
-    printf("%s","LOLZ> ");
+    printf("%s","little> ");
 
     int bytes_read = (int)getline(&input_buf,&nbytes,stdin);
     fflush(stdin);
