@@ -79,6 +79,98 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int grou
   return TRUE;
 }
 
+
+void process_trace(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
+    int status;
+  waitpid(job,&status,WUNTRACED);
+  //if process was suspended
+  if(WIFSTOPPED(status)){
+    //if it was the cause of ctl-Z
+    if(WSTOPSIG(status)==SIGTSTP){
+      //set process to paused state
+      pthread_mutex_lock(&pman->mutex);
+      int j =0;
+      for(;j<MAX_PROCESSES;j++){
+        if(pman->processpids[j]==job){
+          pman->suspendedstatus[j]=TRUE;
+          break;
+        }
+      }
+      pthread_mutex_unlock(&pman->mutex);
+    }
+  }
+  //if process was killed by ctl-C
+  else if(WIFSIGNALED(status)){
+    //print killed message
+    pthread_mutex_lock(stdout_lock);
+    printf("killed\n");
+    pthread_mutex_unlock(stdout_lock);
+  }
+}
+
+
+/**
+* moves job to the foreground
+* pman: ptr to process manager
+* job: process id of job to move to foreground
+* returns: status
+**/
+_BOOL process_foreground(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
+  int i =0;
+  for(;i<MAX_PROCESSES;i++)
+    if(pman->processpids[i]==job)
+      break;
+  if(i == MAX_PROCESSES) return FALSE;
+
+  if(pman->suspendedstatus[i]&&pman->groundstatus[i]==FORE){
+    kill(job,SIGCONT);
+  }
+  else if(pman->groundstatus[i]==BACK){
+    pthread_mutex_lock(&pman->mutex);
+    pman->groundstatus[i]=FORE;
+    pthread_mutex_unlock(&pman->mutex);
+    setpgid(job,pman->foreground_group);
+    kill(job,SIGCONT);
+  }
+  else
+    return FALSE;
+  pthread_mutex_lock(&pman->mutex);
+  pman->suspendedstatus[i]=FALSE;
+  pthread_mutex_unlock(&pman->mutex);
+  process_trace(pman,job,stdout_lock);
+  return TRUE;
+}
+
+
+/**
+*  moves job to background
+* pman: ptr to process manager
+* job: process id of job
+**/
+_BOOL process_background(PMANAGER* pman, pid_t job){
+
+  int i =0;
+  for(;i<MAX_PROCESSES;i++)
+    if(pman->processpids[i]==job)
+      break;
+
+  if(i == MAX_PROCESSES) return FALSE;
+
+
+  if(pman->groundstatus[i]==FORE&&pman->suspendedstatus[i]){
+    setpgid(job,pman->background_group);
+    kill(job,SIGCONT);
+    pthread_mutex_lock(&pman->mutex);
+    pman->groundstatus[i] = BACK;
+    pman->suspendedstatus[i]=FALSE;
+    pthread_mutex_unlock(&pman->mutex);
+  }
+  else
+    return FALSE;
+
+  return TRUE;
+}
+
 /**
 * clean up process entry on death
 * pman: ptr to process manager

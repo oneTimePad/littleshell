@@ -168,7 +168,20 @@ int main(){
           }
           destroyTokens(curr_tkn);
           exit(0);
+        }
+        else if(strcmp(str,"fg")==0){
 
+          pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
+          if(!process_foreground(pman,job,stdout_lock)){
+            printf("Invalid\n");
+          }
+        }
+        else if(strcmp(str,"bg")==0){
+
+          pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
+          if(!process_background(pman,job)){
+            printf("Invalid\n");
+          }
         }
       }
       //unrecognized token

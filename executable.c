@@ -19,6 +19,7 @@ _BOOL isExecutable(char* cmd){
 }
 
 
+
 /**
 *extracts arguments for executable
 * arguments: a string of arguments to program
@@ -250,33 +251,8 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
 
   //clean up all foregrounds
   i =0;
-  int status;
   for(;i<num_foregrounds;i++){
-    waitpid(foregrounds[i],&status,WUNTRACED);
-    //if process was suspended
-    if(WIFSTOPPED(status)){
-      //if it was the cause of ctl-Z
-      if(WSTOPSIG(status)==SIGTSTP){
-        //set process to paused state
-        pthread_mutex_lock(&pman->mutex);
-        int j =0;
-        for(;j<MAX_PROCESSES;j++){
-          if(pman->processpids[j]==foregrounds[i]){
-            pman->suspendedstatus[j]=TRUE;
-            break;
-          }
-        }
-        pthread_mutex_unlock(&pman->mutex);
-      }
-    }
-    //if process was killed by ctl-C
-    else if(WIFSIGNALED(status)){
-      //print killed message
-      pthread_mutex_lock(stdout_lock);
-      printf("killed\n");
-      pthread_mutex_unlock(stdout_lock);
-    }
-
+      process_trace(pman,foregrounds[i],stdout_lock);
   }
 
   return TRUE;
