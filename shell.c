@@ -12,43 +12,16 @@
 #include "tokenizer.h"
 #include "executable.h"
 #include "processmanager.h"
+#include "errors.h"
+#include "internal.h"
 
-//used so we can pass more than one arg to thread routine
-struct _pman_stdout_lock{
-  //process manager
-  PMANAGER pman;
-  //locks stdout allowing for the two threads to synchronize printf
+
+
   pthread_mutex_t stdout_lock;
-};
 
 
 
-/**
-*determines if string is an internal command
-*returns: status
-**/
-_BOOL isInternalCommand(char* cmd){
-  char* commands[] = {"exit","jobs","echo","fg","bg","help",NULL};
-  char** tmp_p = commands;
-  for(;*tmp_p!=NULL;tmp_p++)
-    if(strcmp(*tmp_p,cmd)==0)return TRUE;
 
-  return FALSE;
-}
-
-/**
-* determine if the string is a meta symbol
-* cmd: string to check for meta symbols
-* returns: status
-**/
-_BOOL isMetaSymbol(char* cmd){
-  char* symbols[] = {"|","<",">","<<",">>","&","&&",NULL};
-  char** tmp_p = symbols;
-  for(;*tmp_p!=NULL;tmp_p++)
-    if(strcmp(*tmp_p,cmd)==0)return TRUE;
-
-  return FALSE;
-}
 
 
 
@@ -58,10 +31,10 @@ _BOOL isMetaSymbol(char* cmd){
 * arg: ptr to struct containg the arguments for this routine
   -> pman: process manager and stdout_lock: lock for printf
 **/
-void process_clean(struct _pman_stdout_lock* arg){
+void process_clean(PMANAGER* pman){
 
   while(1){
-    process_cleanup(&arg->pman,&arg->stdout_lock);
+    process_cleanup(pman);
   }
 }
 
@@ -79,38 +52,32 @@ int main(){
 
 
   //create structure to hold process manager and lock for stdout
-  struct _pman_stdout_lock * ptr = (struct _pman_stdout_lock*)malloc(sizeof(struct _pman_stdout_lock));
-  if(ptr == NULL){
-    perror("malloc()");
-    return errno;
-  }
+  PMANAGER * pman = (PMANAGER*)malloc(sizeof(PMANAGER));
+  if(pman == NULL)
+    errnoExit("malloc()");
 
-  PMANAGER* pman = &ptr->pman;
-  pthread_mutex_t* stdout_lock = &ptr->stdout_lock;
+
   //initialize the process manager
-  if(!process_manager_init(pman)){
-    printf("process table initialization failed\n");
-    exit(1);
-  }
+  if(!process_manager_init(pman))
+    errExit("%s\n","process table initialization failed");
+
   //initialize the stdout mutex
-  if(pthread_mutex_init(stdout_lock,NULL)!=0){
-    perror("pthread_mutex_init()");
-    return errno;
-  }
+  if(pthread_mutex_init(&stdout_lock,NULL)!=0)
+    errnoExit("pthread_mutex_init()");
+
   //create thread that looks for processes to clean
   pthread_t clean_thread;
-  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_clean,ptr)!=0){
-    perror("pthread_create()");
-    return errno;
-  }
+  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_clean,pman)!=0)
+    errnoExit("pthread_create()");
+
 
   //ignore termination and suspension
   signal(SIGTSTP,SIG_IGN);
   signal(SIGINT,SIG_IGN);
-
+  pid_t my_pid = getpid();
   //put shell in foreground
-  tcsetpgrp(0,getpid());
-  pman->foreground_group=getpid();
+  tcsetpgrp(0,my_pid);
+  pman->foreground_group=my_pid;
 
   printf("Welcome To littleshell\n \rtype help\n\n");
 
@@ -119,13 +86,12 @@ int main(){
 
 
     //read use input to shell
-    int bytes_in=0;
+
     size_t nbytes=0;
     char *input_buf = NULL;
     printf("%s","little> ");
-
-    int bytes_read = (int)getline(&input_buf,&nbytes,stdin);
-    fflush(stdin);
+    fflush(stdout);
+    ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
     TOKENS* curr_tkn;
 
 
@@ -149,70 +115,23 @@ int main(){
         backgpid = pman->background_group;
         pthread_mutex_unlock(&pman->mutex);
 
-        execute(pman,str,curr_tkn,pman->foreground_group,&backgpid,stdout_lock);
+        execute(pman,str,curr_tkn,pman->foreground_group,&backgpid);
         //edit it since it might have been -1 before
         pthread_mutex_lock(&pman->mutex);
         pman->background_group = backgpid;
         pthread_mutex_unlock(&pman->mutex);
+        continue;
       }
       //if token is an internal command
-      else if(isInternalCommand(str)){
-        if(strcmp(str,"jobs")==0){
-          process_dump(pman,stdout_lock);
-        }
-        else if(strcmp(str,"exit")==0){
-          //terminate all processes
-          int i =0;
-          for(;i<MAX_PROCESSES;i++){
-            if(pman->processpids[i]!=-1){
-              kill(pman->processpids[i],SIGINT);
-            }
-          }
-          destroyTokens(curr_tkn);
-          exit(0);
-        }
-        else if(strcmp(str,"fg")==0){
-
-          pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
-          if(!process_foreground(pman,job,stdout_lock)){
-            pthread_mutex_lock(stdout_lock);
-            printf("Invalid\n");
-            pthread_mutex_unlock(stdout_lock);
-          }
-        }
-        else if(strcmp(str,"bg")==0){
-
-          pid_t job = (pid_t)atoi(getTokenNextCommand(curr_tkn));
-          if(!process_background(pman,job)){
-            pthread_mutex_lock(stdout_lock);
-            printf("Invalid\n");
-            pthread_mutex_unlock(stdout_lock);
-          }
-        }
-
-        else if(strcmp(str,"echo")==0){
-          if(strcmp(getTokenNextCommand(curr_tkn),"$status")==0){
-            pthread_mutex_lock(stdout_lock);
-            pthread_mutex_lock(&pman->mutex);
-            printf("%d\n",pman->recent_foreground_status);
-            pthread_mutex_unlock(&pman->mutex);
-            pthread_mutex_unlock(stdout_lock);
-          }
-        }
-
-        else if(strcmp(str,"help")==0){
-          printf("\rexit: close shell\n");
-          printf("\rjobs: list current processes\n");
-          printf("\recho $status: print exit status of last foreground job\n");
-          printf("\rfg <job_id>: run job in foreground(continue)\n");
-          printf("\rbg <job_id>: run job in background\n");
-          printf("\r<executable> <arg1> <arg2> ...\n");
-        }
+      short key;
+      if((key=isInternalCommand(str))!=NONE){
+        if(!internal_command(key,pman,str,curr_tkn))
+          errnoExit("internal_command()");
       }
       //unrecognized token
-      else{
+      else
         printf("%s: command not found\n",str);
-      }
+
 
     }
 

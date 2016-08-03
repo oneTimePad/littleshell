@@ -75,7 +75,7 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int grou
 }
 
 
-void process_trace(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
+void process_trace(PMANAGER* pman,pid_t job){
     int status;
   waitpid(job,&status,WUNTRACED);
   pthread_mutex_lock(&pman->mutex);
@@ -100,9 +100,9 @@ void process_trace(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
   //if process was killed by ctl-C
   else if(WIFSIGNALED(status)){
     //print killed message
-    pthread_mutex_lock(stdout_lock);
+    pthread_mutex_lock(&stdout_lock);
     printf("killed\n");
-    pthread_mutex_unlock(stdout_lock);
+    pthread_mutex_unlock(&stdout_lock);
   }
 }
 
@@ -113,7 +113,7 @@ void process_trace(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
 * job: process id of job to move to foreground
 * returns: status
 **/
-_BOOL process_foreground(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
+_BOOL process_foreground(PMANAGER* pman,pid_t job){
   int i =0;
   for(;i<MAX_PROCESSES;i++)
     if(pman->processpids[i]==job)
@@ -135,7 +135,7 @@ _BOOL process_foreground(PMANAGER* pman,pid_t job,pthread_mutex_t* stdout_lock){
   pthread_mutex_lock(&pman->mutex);
   pman->suspendedstatus[i]=FALSE;
   pthread_mutex_unlock(&pman->mutex);
-  process_trace(pman,job,stdout_lock);
+  process_trace(pman,job);
   return TRUE;
 }
 
@@ -187,7 +187,7 @@ static void process_destroy(PMANAGER* pman,int proc_index){
 * ran in separate thread. look for dead processes to clean up
 * pman: ptr to process manager
 **/
-void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
+void process_cleanup(PMANAGER* pman){
 
     //notified when child closes pipe write end
 
@@ -208,9 +208,9 @@ void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
 
           // if it is background, send a msg to stdout
           if(pman->groundstatus[i]==BACK){
-            pthread_mutex_lock(stdout_lock);
+            pthread_mutex_lock(&stdout_lock);
             printf("DONE: %s\n",pman->processnames[i]);
-            pthread_mutex_unlock(stdout_lock);
+            pthread_mutex_unlock(&stdout_lock);
           }
           process_destroy(pman,i);
 
@@ -227,17 +227,17 @@ void process_cleanup(PMANAGER* pman,pthread_mutex_t* stdout_lock){
 * prints out a list of active processes
 * pman: ptr to process manager
 **/
-void process_dump(PMANAGER* pman, pthread_mutex_t* stdout_lock){
+void process_dump(PMANAGER* pman){
 
   pthread_mutex_lock(&pman->mutex);
   int i = 0;
-  pthread_mutex_lock(stdout_lock);
+  pthread_mutex_lock(&stdout_lock);
   for(;i<MAX_PROCESSES;i++)
     if(pman->processpids[i]!=-1 && pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s SUSPENDED\n",pman->processpids[i],pman->processnames[i]);
     else if(pman->processpids[i]!=-1 && !pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s RUNNING\n",pman->processpids[i],pman->processnames[i]);
 
-  pthread_mutex_unlock(stdout_lock);
+  pthread_mutex_unlock(&stdout_lock);
   pthread_mutex_unlock(&pman->mutex);
 }

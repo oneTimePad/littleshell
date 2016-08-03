@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include "bool.h"
 
+extern pthread_mutex_t stdout_lock;
 typedef enum {FORE , BACK} _GROUND;
 
 //used for storing info on a process to be created
@@ -43,8 +44,8 @@ typedef struct _PMANAGER{
 _BOOL process_manager_init(PMANAGER*);
 _BOOL process_init(PMANAGER*,char*,pid_t, int*, int);
 static void process_destroy(PMANAGER*,int);
-void process_cleanup(PMANAGER*,pthread_mutex_t*);
-void process_dump(PMANAGER*,pthread_mutex_t*);
+void process_cleanup(PMANAGER*);
+void process_dump(PMANAGER*);
 
 
 #endif

@@ -18,7 +18,19 @@ _BOOL isExecutable(char* cmd){
   return TRUE;
 }
 
+/**
+* determine if the string is a meta symbol
+* cmd: string to check for meta symbols
+* returns: status
+**/
+_BOOL isMetaSymbol(char* cmd){
+  char* symbols[] = {"|","<",">","<<",">>","&","&&",NULL};
+  char** tmp_p = symbols;
+  for(;*tmp_p!=NULL;tmp_p++)
+    if(strcmp(*tmp_p,cmd)==0)return TRUE;
 
+  return FALSE;
+}
 
 /**
 *extracts arguments for executable
@@ -31,7 +43,7 @@ static void process_arguments(char** arguments,TOKENS* tkns){
   //look at the next token
   for(;current_token!=NULL;current_token=testTokenNextCommand(tkns))
     //if it isn't an internal command or meta symbol it's an arg
-    if(!isMetaSymbol(current_token)&&!isInternalCommand(current_token)&&index+2<MAX_ARGUMENT)
+    if(!isMetaSymbol(current_token)&&index+2<MAX_ARGUMENT)
         arguments[index++]=getTokenNextCommand(tkns);
     else
       break;
@@ -110,6 +122,7 @@ _BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_st
 
 
 
+
 /**
 *execute the executable in a new process
 *pman: ptr to process manager
@@ -117,16 +130,15 @@ _BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_st
 *tkns: ptr to tokens struct
 *returns: status of success
 **/
-_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* background_group,pthread_mutex_t* stdout_lock){
+_BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* background_group){
 
   //info for all processes to be created
   EMBRYO new_proc[MAX_PROCESSES];
 
   //prepare info for the first process
-  if(!prepare_process(pman,cmd,new_proc,-1,tkns)){
-    perror("prepare_process()");
+  if(!prepare_process(pman,cmd,new_proc,-1,tkns))
     return FALSE;
-  }
+
   //number of processes in the pipe
   int num_procs_in_pipe = 1;
   //while there is a still a pipe
@@ -136,16 +148,13 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
     //if the next program after the pipe is not valid
     char* second_prog ="";
     if((second_prog=testTokenNextCommand(tkns))==NULL || ! isExecutable(second_prog)){
-      perror("execute()");
       return FALSE;
     }
     getTokenNextCommand(tkns);
     //create pipe
     int pipe_fd_pipe[2];
-    if(pipe(pipe_fd_pipe)==-1){
-      perror("pipe()");
+    if(pipe(pipe_fd_pipe)==-1)
       return FALSE;
-    }
     //set first proc in pipe's stdout to write end of pipe
     new_proc[num_procs_in_pipe-1].p_stdout = pipe_fd_pipe[1];
     //prepare info for process on the other side of the pipe and set its stdin to the read end of the pipe
@@ -167,10 +176,9 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
     embryos = new_proc+i;
     //pipe for watching child
     int pipe_ends[2];
-    if(pipe(pipe_ends)==-1){
-      perror("pipe()");
+    if(pipe(pipe_ends)==-1)
       return FALSE;
-    }
+
 
 
 
@@ -208,10 +216,8 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
       }
 
       //start
-      if(execv(embryos->arguments[0],embryos->arguments)!=0){
-        perror("execute()");
-        exit(-1);
-      }
+      if(execv(embryos->arguments[0],embryos->arguments)!=0)
+        return FALSE;
 
     }
     //parent
@@ -223,10 +229,8 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
         close(embryos->p_stdout);
 
       //initialize process to table
-      if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background)){
-        perror("process_init()");
+      if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background))
         return FALSE;
-      }
       //put it in the foreground table if it is not a bg process
       if(!embryos->background){
         foregrounds[num_foregrounds++]=pid;
@@ -252,7 +256,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
   //clean up all foregrounds
   i =0;
   for(;i<num_foregrounds;i++){
-      process_trace(pman,foregrounds[i],stdout_lock);
+      process_trace(pman,foregrounds[i]);
   }
 
   return TRUE;
