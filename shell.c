@@ -82,6 +82,10 @@ int main(){
 
   printf("Welcome To littleshell\n \rtype help\n\n");
 
+
+  /**
+  * print name username and host
+  **/
   uid_t shell_id;
   shell_id = getuid();
 
@@ -109,10 +113,6 @@ int main(){
   if(snprintf(shell_name,total_len,"%s@%s:%s",shell_user,shell_host,shell_title)!=total_len-1)
     errExit("%s\n","not enough buffer space for shell_name");
 
-
-
-
-  struct passwd* pwd;
 
 
 
