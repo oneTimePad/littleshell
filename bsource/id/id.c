@@ -87,12 +87,62 @@ USER * getuserinfo(void){
   return &useri;
 }
 
-
+static struct option long_options[] = {
+  {"context", no_argument,    0 , 'Z'},
+  {"group"  , no_argument,    0 , 'g'},
+  {"groups" , no_argument,    0 , 'G'},
+  {"name"   , no_argument,    0 , 'n'},
+  {"real"   , no_argument,    0 , 'r'},
+  {"user"   , no_argument,    0 , 'u'},
+  {"help"   , no_argument,    0 , 'h'},
+  {"version", no_argument,    0 , 'v'},
+  { 0,             0,         0,   0 }
+};
 
 
 int
 main(int argc, char* argv[]){
 
+
+  ID_OPTIONS opt_mask;
+
+  int opt =0;
+  int long_index = 0;
+  while((opt = getopt_long(argc,argv,"ZgGnruhv", long_options, &long_index)) != -1){
+      switch(opt){
+          case 'Z':
+            opt_mask.bits.Z =1; //security context
+            break;
+          case 'g':
+            opt_mask.bits.g =1; //print group
+            break;
+          case 'G':
+            opt_mask.bits.G =1; //print groups
+            break;
+          case 'n':
+            opt_mask.bits.n =1; //print name
+            break;
+          case 'r':
+            opt_mask.bits.r =1; //print rid
+            break;
+          case 'u':
+            opt_mask.bits.u =1; //print eff uid only
+            break;
+          case 'h':
+            opt_mask.bits.h =1; //print help
+            break;
+          case 'v':
+            opt_mask.bits.v =1; //print version
+            break;
+          case '?':
+            errExit("%s%s\n","unkown option ",opterr);
+            break;
+          default:
+            errExit("%s\n","error occured while parsing options");
+
+
+      }
+  }
 
 
 

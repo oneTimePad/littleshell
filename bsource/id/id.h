@@ -25,6 +25,33 @@ typedef struct PROCESS_USER{
 
 }USER;
 
+#define CONTX  128
+#define GROUP  64
+#define GROUPS 32
+#define NAME   16
+#define REAL   8
+#define USER   4
+#define HELP   2
+#define VERS   1
+
+
+//creates a bit mask for options
+typedef union _ID_OPTIONS{
+
+  struct {
+    unsigned char Z:1;
+    unsigned char g:1;
+    unsigned char G:1;
+    unsigned char n:1;
+    unsigned char r:1;
+    unsigned char u:1;
+    unsigned char h:1;
+    unsigned char v:1;
+  } bits;
+  char byte;
+
+} ID_OPTIONS;
+
 _BOOL getnamefromgid(gid_t,char *, size_t);
 _BOOL getnamefromuid(uid_t, char *, size_t);
 USER * getuserinfo(void);
