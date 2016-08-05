@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pwd.h>
 #include "bool.h"
 #include "tokenizer.h"
 #include "executable.h"
@@ -81,6 +82,40 @@ int main(){
 
   printf("Welcome To littleshell\n \rtype help\n\n");
 
+  uid_t shell_id;
+  shell_id = getuid();
+
+  struct passwd* pw;
+  if( (pw = getpwuid(shell_id)) == NULL){
+    errnoExit("getpwuid()");
+    errExit("%s\n","passwd entry for uid not found");
+  }
+  char *shell_user = pw->pw_name;
+
+  long host_name_max;
+  if((host_name_max = sysconf(_SC_HOST_NAME_MAX)) == -1)
+    errnoExit("sysconf()");
+
+  char shell_host[host_name_max+1];
+  if(gethostname(shell_host,host_name_max+1)==-1)
+    errnoExit("gethostname()");
+
+  const char* shell_title = "little>";
+  #define LEN_AT 1
+  #define LEN_COLON 1
+  long total_len = strlen(shell_host)+strlen(shell_user)+strlen(shell_title)+LEN_AT+LEN_COLON+1;
+
+  char shell_name[total_len];
+  if(snprintf(shell_name,total_len,"%s@%s:%s",shell_user,shell_host,shell_title)!=total_len-1)
+    errExit("%s\n","not enough buffer space for shell_name");
+
+
+
+
+  struct passwd* pwd;
+
+
+
 //main loop
   while(1){
 
@@ -89,7 +124,7 @@ int main(){
 
     size_t nbytes=0;
     char *input_buf = NULL;
-    printf("%s","little> ");
+    printf("%s",shell_name);
     fflush(stdout);
     ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
     TOKENS* curr_tkn;
