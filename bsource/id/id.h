@@ -30,7 +30,7 @@ typedef struct PROCESS_USER{
 #define GROUPS 32
 #define NAME   16
 #define REAL   8
-#define USER   4
+#define USR   4
 #define HELP   2
 #define VERS   1
 

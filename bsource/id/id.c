@@ -4,6 +4,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <errno.h>
+#include <getopt.h>
 #include "../../errors.h"
 #include "id.h"
 
@@ -87,7 +88,7 @@ USER * getuserinfo(void){
   return &useri;
 }
 
-static struct option long_options[] = {
+struct option long_options[] = {
   {"context", no_argument,    0 , 'Z'},
   {"group"  , no_argument,    0 , 'g'},
   {"groups" , no_argument,    0 , 'G'},
@@ -132,7 +133,7 @@ main(int argc, char* argv[]){
             opt_mask.bits.h =1; //print help
             break;
           case 'v':
-            opt_mask.bits.v =1; //print version
+            opt_mask.bits.v =1; //print verbose
             break;
           case '?':
             errExit("%s%s\n","unkown option ",opterr);
@@ -144,7 +145,12 @@ main(int argc, char* argv[]){
       }
   }
 
+  USER* useri = getuserinfo();
 
+  char name_buf[LOGIN_NAME_MAX];
+  if(!getnamefromuid(useri->rid,name_buf,LOGIN_NAME_MAX))
+    errnoExit("getnamefromuid()");
+  printf("uid=%d(%s) ",useri->rid,name_buf);
 
   exit(EXIT_SUCCESS);
 }
