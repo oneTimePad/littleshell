@@ -10,6 +10,34 @@
 
 
 #define GNU_SOURCE 1
+
+/**
+* determines whether the option mask is valid
+* (i.e. can't have multiple "only" options
+* mask: ptr to bitmask options
+* returns: status
+**/
+static inline _BOOL validateMask(const ID_OPTIONS* mask){
+
+  int count =0;
+
+  count+= ((mask->byte&GROUP) ? 1 : 0);
+  count+= ((mask->byte&CONTX) ? 1 : 0);
+  count+= ((mask->byte&USR)   ? 1 : 0);
+
+  int others=0;
+
+  others+=((mask->byte&GROUPS)? 1 : 0);
+  others+=((mask->byte&NAME)  ? 1 : 0);
+  others+=((mask->byte&REAL)  ? 1 : 0);
+  others+=((mask->byte&HELP)  ? 1 : 0);
+  others+=((mask->byte&VERS)  ? 1 : 0);
+
+  return ( (count!=1 && count!=0) || (count!=0 && others!=0)) ? FALSE : TRUE;
+
+}
+
+
 /**
 * converts gid into corresponding name
 * gid: id to converts
@@ -17,7 +45,7 @@
 * buf_size: size of buf
 * returns: int status, sets errno
 **/
-_BOOL getnamefromgid(gid_t gid, char *name, size_t buf_size){
+static _BOOL getnamefromgid(gid_t gid, char *name, size_t buf_size){
 
   struct group * grp;
   errno = 0;
@@ -41,7 +69,7 @@ _BOOL getnamefromgid(gid_t gid, char *name, size_t buf_size){
 * buf_size: size of buf
 * returns: int status, sets errno
 **/
-_BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
+static _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
   struct passwd* pw;
   errno = 0;
   if((pw = getpwuid(uid)) == NULL)
@@ -60,7 +88,7 @@ _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
 * retrieve user id information
 * returns: static user struct
 **/
-USER * getuserinfo(void){
+static USER * getuserinfo(void){
   static USER useri;
   memset(&useri,0,sizeof(USER));
   #ifdef GNU_SOURCE
@@ -148,7 +176,25 @@ main(int argc, char* argv[]){
       }
   }
 
+  if(!validateMask(&opt_mask))
+    errExit("%s\n", "id cannot print \"only\" of more than one choice");
+
   USER* useri = getuserinfo();
+
+  if(opt_mask.byte&GROUP){
+    printf("%d\n",useri->egid);
+    fflush(stdout);
+    exit(EXIT_SUCCESS);
+  }
+
+  if(opt_mask.byte&GROUPS){
+    int max_grp_id =useri->num_grps, grp_id = 0;
+    for(;grp_id<max_grp_id;grp_id++)
+      printf("%d ",useri->grouplist[grp_id]);
+    printf("\n");
+    fflush(stdout);
+    exit(EXIT_SUCCESS);
+  }
 
   char name_buf[LOGIN_NAME_MAX];
   if(!getnamefromuid(useri->rid,name_buf,LOGIN_NAME_MAX))
