@@ -9,7 +9,7 @@
 #include "id.h"
 
 
-#define GNU_SOURCE 1
+
 
 /**
 * determines whether the option mask is valid
@@ -91,6 +91,8 @@ static _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
 static USER * getuserinfo(void){
   static USER useri;
   memset(&useri,0,sizeof(USER));
+
+  //if linux, we can use easy fct's
   #ifdef GNU_SOURCE
   errno = 0;
   if(getresuid(&useri.rid,&useri.eid,&useri.suid) == -1)
@@ -98,11 +100,12 @@ static USER * getuserinfo(void){
 
   if(getresgid(&useri.rgid,&useri.egid,&useri.sgid) == -1)
       return NULL;
+  //else the long way
   #else
 
   useri.rid = getuid();
   useri.eid = geteuid();
-  useri.suid = NOT_APPL;
+  useri.suid = NOT_APPL; //no way to get this
 
   useri.rgid = getgid();
   useri.egid = getegid();
@@ -127,7 +130,7 @@ static struct option long_options[] = {
   {"real"   , no_argument,    0 , 'r'},
   {"user"   , no_argument,    0 , 'u'},
   {"help"   , no_argument,    0 , 'h'},
-  {"version", no_argument,    0 , 'v'},
+  {"verbose", no_argument,    0 , 'v'},
   { 0,             0,         0,   0 }
 };
 
@@ -187,6 +190,12 @@ main(int argc, char* argv[]){
     exit(EXIT_SUCCESS);
   }
 
+  if(opt_mask.byte&USR){
+    printf("%d\n",useri->eid);
+    fflush(stdout);
+    exit(EXIT_SUCCESS);
+  }
+
   if(opt_mask.byte&GROUPS){
     int max_grp_id =useri->num_grps, grp_id = 0;
     for(;grp_id<max_grp_id;grp_id++)
@@ -213,8 +222,34 @@ main(int argc, char* argv[]){
       errnoExit("getnamefromgid()");
     printf(",%d(%s)",useri->grouplist[grp_id],name_buf);
   }
-  printf("\n");
   fflush(stdout);
+  printf("\n");
+
+
+  if(opt_mask.byte&VERS){
+    if(!getnamefromuid(useri->eid,name_buf,LOGIN_NAME_MAX))
+      errnoExit("getnamefromuid()");
+    printf("euid=%d(%s) ",useri->eid,name_buf);
+
+    if(useri->suid!=-1){
+      if(!getnamefromuid(useri->suid,name_buf,LOGIN_NAME_MAX))
+        errnoExit("getnamefromuid()");
+      printf("suid=%d(%s) ",useri->suid,name_buf);
+    }
+
+    if(!getnamefromgid(useri->egid,name_buf,LOGIN_NAME_MAX))
+      errnoExit("getnamefromgid()");
+    printf("egid=%d(%s) ",useri->egid,name_buf);
+
+    if(useri->sgid!=-1){
+      if(!getnamefromgid(useri->sgid,name_buf,LOGIN_NAME_MAX))
+        errnoExit("getnamefromgid()");
+      printf("sgid=%d(%s) ",useri->sgid,name_buf);
+    }
+    fflush(stdout);
+    printf("\n");
+
+  }
 
   exit(EXIT_SUCCESS);
 }
