@@ -20,7 +20,7 @@ typedef struct PROCESS_USER{
   gid_t sgid;  // saved-set gid
 
   gid_t grouplist[NGROUPS_MAX+1]; //supp gids
-
+  int num_grps;
 
 
 }USER;

@@ -9,7 +9,7 @@
 #include "id.h"
 
 
-
+#define GNU_SOURCE 1
 /**
 * converts gid into corresponding name
 * gid: id to converts
@@ -82,13 +82,16 @@ USER * getuserinfo(void){
 
   #endif
   errno = 0;
-  if(getgroups(NGROUPS_MAX+1,useri.grouplist) == -1)
+  int supp_grp_num;
+  if((supp_grp_num=getgroups(NGROUPS_MAX+1,useri.grouplist)) == -1)
     return NULL;
+
+  useri.num_grps = supp_grp_num;
 
   return &useri;
 }
 
-struct option long_options[] = {
+static struct option long_options[] = {
   {"context", no_argument,    0 , 'Z'},
   {"group"  , no_argument,    0 , 'g'},
   {"groups" , no_argument,    0 , 'G'},
@@ -151,6 +154,21 @@ main(int argc, char* argv[]){
   if(!getnamefromuid(useri->rid,name_buf,LOGIN_NAME_MAX))
     errnoExit("getnamefromuid()");
   printf("uid=%d(%s) ",useri->rid,name_buf);
+
+  if(!getnamefromgid(useri->rgid,name_buf,LOGIN_NAME_MAX))
+    errnoExit("getnamefromgid()");
+  printf("gid=%d(%s) ",useri->rgid,name_buf);
+
+  printf("groups=%d(%s)",useri->rgid,name_buf);
+
+  int max_grp_id =useri->num_grps, grp_id = 1;
+  for(;grp_id <max_grp_id-1; grp_id++ ){
+    if(!getnamefromgid(useri->grouplist[grp_id],name_buf,LOGIN_NAME_MAX))
+      errnoExit("getnamefromgid()");
+    printf(",%d(%s)",useri->grouplist[grp_id],name_buf);
+  }
+  printf("\n");
+  fflush(stdout);
 
   exit(EXIT_SUCCESS);
 }
