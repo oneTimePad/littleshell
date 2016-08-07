@@ -149,7 +149,7 @@ int main(int argc, char* argv[]){
 
     int opt =0;
     int long_index = 0;
-    while((opt = getopt_long(argc,argv,"laAuiLoRsthp", long_options, &long_index)) != -1){
+    while((opt = getopt_long(argc,argv,"laAuiLoRsthpv", long_options, &long_index)) != -1){
         switch(opt){
 
           case 'l':
@@ -187,6 +187,9 @@ int main(int argc, char* argv[]){
             break;
           case 'h':
             opt_mask.bits.h = 1; //display this help and exit
+            break;
+          case 'v':
+            opt_mask.bits.v = 1;
             break;
           case '?':
             fflush(stdout);
@@ -306,6 +309,13 @@ int main(int argc, char* argv[]){
               printf("%ld",(long)en->size);
               printf("%s",SPACES);
 
+
+              if(opt_mask.halfword&VERBOSE){
+                printf("%ld",(long)en->phy_blks);
+                printf("%s",SPACES);
+              }
+
+              const char* time_fmt = "%b %d %I:%M";
               //last modification time of file
               struct tm* time_struc;
               errno = 0;
@@ -313,10 +323,33 @@ int main(int argc, char* argv[]){
                 errnoExit("localtime()");
 
               errno = 0;
-              if(strftime(time_buf,MAX_TIME_STRING,"%b %d %I:%M",time_struc)==0)
+              if(strftime(time_buf,MAX_TIME_STRING,time_fmt,time_struc)==0)
                 errnoExit("strftime()"); //checks if errno is not zero
               printf("%s",time_buf);
               printf("%s",SPACES);
+
+              if(opt_mask.halfword&VERBOSE){
+
+                  errno = 0;
+                  if((time_struc=localtime(&en->t_atime)) == NULL)
+                    errnoExit("localtime()");
+
+                  if(strftime(time_buf,MAX_TIME_STRING,time_fmt,time_struc)==0)
+                      errnoExit("strftime()");
+
+                  printf("%s",time_buf);
+                  printf("%s",SPACES);
+
+                  if((time_struc=localtime(&en->t_ctime)) == NULL)
+                    errnoExit("localtime()");
+
+                  if(strftime(time_buf,MAX_TIME_STRING,time_fmt,time_struc)==0)
+                      errnoExit("strftime()");
+
+                  printf("%s",time_buf);
+                  printf("%s",SPACES);
+
+              }
         }
 
         char* file_name = basename(en->full_path);

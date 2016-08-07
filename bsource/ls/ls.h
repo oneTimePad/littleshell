@@ -14,6 +14,7 @@
 #define SRT_MODF  512
 #define HELP      1024
 #define SPECIAL   2048
+#define VERBOSE   4096
 
 #ifdef _GNU_SOURCE
 #include <linux/limits.h>
@@ -55,7 +56,7 @@ typedef union _LS_OPTIONS{
     unsigned char t:1; //sort by modification time, newest first
     unsigned char h:1; //display this help and exit
     unsigned char p:1; //print special bits in perm maks
-    unsigned char unk1:1; //unused
+    unsigned char v:1; //verbose
     unsigned char unk2:1;
     unsigned char unk3:1;
     unsigned char unk4:1;
