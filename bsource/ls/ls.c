@@ -116,6 +116,14 @@ static _BOOL formPath(const char* path, const struct dirent* entry,char* buff,si
 
 }
 
+static printPerm(const FILE_ENTRY *entry, int flags){
+  printf("%c%c%c%c%c%c%c%c%c%c",    (S_ISREG(entry->perm))? 'd' : '-'));
+                    (entry->perm&S_IRUSR) ? 'r' : '-'),
+                  (entry->perm&S_IWUSR) ? 'w' : '-'),
+                  (entry->perm&S_IXUSR) ? ()    : '-'
+
+
+}
 
 
 static struct option long_options[] = {
@@ -199,7 +207,7 @@ int main(int argc, char* argv[]){
 
 
     int entry_ind = 0;
-    FILE_ENTRY *entries = (FILE_ENTRY *)malloc(DEF_MAX_ENTRIES);
+    restrict FILE_ENTRY *entries = (FILE_ENTRY *)malloc(DEF_MAX_ENTRIES);
 
     struct dirent *entry;
     errno = 0;
@@ -215,6 +223,7 @@ int main(int argc, char* argv[]){
         if(((opt_mask.halfword&DEREF)? stat(en->full_path,&file_stat) : lstat(en->full_path,&file_stat)) == -1)
           errnoExit((opt_mask.halfword&DEREF)? "stat()" : "lstat()");
 
+        //initialize file struct
         en->perm    = file_stat.st_mode;
         en->ino_num = file_stat.st_ino;
         en->hlinks  = file_stat.st_nlink;
@@ -240,7 +249,23 @@ int main(int argc, char* argv[]){
         en = entries+entry_ind;
         char* file_name = basename(en->full_path);
         printf("%s\n",file_name);
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
+
+
+    free(entries);
 
         /*
         int cforeground=WHITE;
