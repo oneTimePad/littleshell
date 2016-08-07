@@ -22,7 +22,7 @@
 #define PATH_LIM 8012
 #endif
 
-#define DEF_MAX_ENTRIES 1024
+
 
 typedef struct _FILE_ENTRY{
     mode_t   perm;    //permission bit-mask

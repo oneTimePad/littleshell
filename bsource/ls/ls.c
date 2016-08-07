@@ -17,27 +17,11 @@
 #include "colors.h"
 #include "ls.h"
 
+
 #define CURR_DIRECTORY "PWD"
+#define DEF_MAX_ENTRIES 1024
 #define MAX_TIME_STRING 1024
-#define MAX_LONG_FORM_PRINT 2000
-#define LEN_MAX_64_SINT 20
-
-
-#define DIREC "d"
-#define READ "r"
-#define WRITE "w"
-#define EXEC "x"
-#define NONE "-"
-
-
-#define ISTOOLONG(LENGTH) (LENGTH>=MAX_LONG_FORM_PRINT)? TRUE : FALSE
-#define ISD(MODE) (!S_ISREG(MODE))? DIREC: NONE
-#define ISR(MODE,MASK) (MODE & MASK)? READ : NONE
-#define ISW(MODE,MASK) (MODE & MASK)? WRITE : NONE
-#define ISX(MODE,MASK) (MODE & MASK)? EXEC : NONE
-
 #define SPECIAL_BITS 1
-
 #define SPACES "   "
 
 /**
@@ -288,20 +272,27 @@ int main(int argc, char* argv[]){
           printf(SPACES);
         }
         //long-form
-        if(opt_mask.halfword&LONG_LIST){
+        if(opt_mask.halfword&LONG_LIST || opt_mask.halfword&NO_GRP){
               //permision mask
               printPerm(en,((opt_mask.halfword&SPECIAL) ? SPECIAL_BITS: 0));
               printf("%s",SPACES);
+
+              printf("%ld",en->hlinks);
+              printf("%s",SPACES);
+
               //owner of file
               if(getnamefromuid(en->uid,name_buf,LOGIN_NAME_MAX))
                 errnoExit("getnamefromuid()");
               printf("%s",name_buf);
               printf("%s",SPACES);
-              //group owner of file
-              if(getnamefromgid(en->gid,name_buf,LOGIN_NAME_MAX))
-                errnoExit("getnamefromgid()");
-              printf("%s",name_buf);
-              printf("%s",SPACES);
+
+              if(!(opt_mask.halfword&NO_GRP)){
+                //group owner of file
+                if(getnamefromgid(en->gid,name_buf,LOGIN_NAME_MAX))
+                  errnoExit("getnamefromgid()");
+                printf("%s",name_buf);
+                printf("%s",SPACES);
+              }
 
               //size of file in bytes
               printf("%ld",(long)en->size);
