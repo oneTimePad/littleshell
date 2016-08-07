@@ -88,36 +88,83 @@ static _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
 * retrieve user id information
 * returns: static user struct
 **/
-static USER * getuserinfo(void){
+static USER * getuserinfo(const char* optional_user){
+
+
   static USER useri;
   memset(&useri,0,sizeof(USER));
 
-  //if linux, we can use easy fct's
-  #ifdef GNU_SOURCE
-  errno = 0;
-  if(getresuid(&useri.rid,&useri.eid,&useri.suid) == -1)
-      return NULL; //errno is set, return null
+  if(optional_user==NULL){
 
-  if(getresgid(&useri.rgid,&useri.egid,&useri.sgid) == -1)
+    //if linux, we can use easy fct's
+    #ifdef GNU_SOURCE
+    errno = 0;
+    if(getresuid(&useri.rid,&useri.eid,&useri.suid) == -1)
+        return NULL; //errno is set, return null
+
+    if(getresgid(&useri.rgid,&useri.egid,&useri.sgid) == -1)
+        return NULL;
+    //else the long way
+    #else
+
+    useri.rid = getuid();
+    useri.eid = geteuid();
+    useri.suid = NOT_APPL; //no way to get this
+
+    useri.rgid = getgid();
+    useri.egid = getegid();
+    useri.sgid = NOT_APPL;
+
+    #endif
+    errno = 0;
+    int supp_grp_num;
+    if((supp_grp_num=getgroups(NGROUPS_MAX+1,useri.grouplist)) == -1)
       return NULL;
-  //else the long way
-  #else
 
-  useri.rid = getuid();
-  useri.eid = geteuid();
-  useri.suid = NOT_APPL; //no way to get this
+    useri.num_grps = supp_grp_num;
+  }
+  else{
+      struct passwd* pw;
+      errno = 0;
+      if((pw=getpwnam(optional_user)) == NULL){
+        errnoExit("getpwnam()");
+        errExit("%s \"%s\" %s\n","user",optional_user,"notfound");
+      }
+      useri.rid = pw->pw_uid;
+      useri.rgid = pw->pw_gid;
 
-  useri.rgid = getgid();
-  useri.egid = getegid();
-  useri.sgid = NOT_APPL;
+      useri.eid = NOT_APPL;
+      useri.egid = NOT_APPL;
 
-  #endif
-  errno = 0;
-  int supp_grp_num;
-  if((supp_grp_num=getgroups(NGROUPS_MAX+1,useri.grouplist)) == -1)
-    return NULL;
+      useri.suid = NOT_APPL;
+      useri.sgid = NOT_APPL;
 
-  useri.num_grps = supp_grp_num;
+      //portable way of determing if user is part of group
+      int grp_id =-1;
+      errno = 0;
+      struct group* grp_entry;
+      while((grp_entry=getgrent())!=NULL){
+
+        char** grp_mem_list = grp_entry->gr_mem;
+        //if it owns the group
+        if(strncmp(optional_user,grp_entry->gr_name,strlen(grp_entry->gr_name))==0){
+          useri.grouplist[++grp_id] = grp_entry->gr_gid;
+          break;
+        }
+        //check if it is in that group
+        for(;*grp_mem_list!=NULL;grp_mem_list++){
+          if(strncmp(optional_user,*grp_mem_list,strlen(*grp_mem_list))==0){
+            useri.grouplist[++grp_id] = grp_entry->gr_gid;
+            break;
+          }
+        }
+      }
+      endgrent();
+      errnoExit("getgrent()"); //checks if errno is not 0
+      if(grp_id!=-1)
+        useri.num_grps = grp_id+1;
+
+  }
 
   return &useri;
 }
@@ -179,19 +226,22 @@ main(int argc, char* argv[]){
       }
   }
 
+
+
   if(!validateMask(&opt_mask))
     errExit("%s\n", "id cannot print \"only\" of more than one choice");
 
-  USER* useri = getuserinfo();
+  char *user = (argc>1) ? argv[((optind>0)? optind : optind+1)] : NULL;
+  USER* useri = getuserinfo(user);
 
   if(opt_mask.byte&GROUP){
-    printf("%d\n",useri->egid);
+    (user==NULL)? printf("%d\n",useri->egid) : errExit("%s\n","invalid option when user is specifed");
     fflush(stdout);
     exit(EXIT_SUCCESS);
   }
 
   if(opt_mask.byte&USR){
-    printf("%d\n",useri->eid);
+    (user==NULL)? printf("%d\n",useri->eid) : errExit("%s\n","invalid option when user is specifed");
     fflush(stdout);
     exit(EXIT_SUCCESS);
   }
@@ -227,19 +277,22 @@ main(int argc, char* argv[]){
 
 
   if(opt_mask.byte&VERS){
-    if(!getnamefromuid(useri->eid,name_buf,LOGIN_NAME_MAX))
-      errnoExit("getnamefromuid()");
-    printf("euid=%d(%s) ",useri->eid,name_buf);
+    if(useri->eid!=-1){
+      if(!getnamefromuid(useri->eid,name_buf,LOGIN_NAME_MAX))
+        errnoExit("getnamefromuid()");
+      printf("euid=%d(%s) ",useri->eid,name_buf);
+    }
 
     if(useri->suid!=-1){
       if(!getnamefromuid(useri->suid,name_buf,LOGIN_NAME_MAX))
         errnoExit("getnamefromuid()");
       printf("suid=%d(%s) ",useri->suid,name_buf);
     }
-
-    if(!getnamefromgid(useri->egid,name_buf,LOGIN_NAME_MAX))
-      errnoExit("getnamefromgid()");
-    printf("egid=%d(%s) ",useri->egid,name_buf);
+    if(useri->egid!=-1){
+      if(!getnamefromgid(useri->egid,name_buf,LOGIN_NAME_MAX))
+        errnoExit("getnamefromgid()");
+      printf("egid=%d(%s) ",useri->egid,name_buf);
+    }
 
     if(useri->sgid!=-1){
       if(!getnamefromgid(useri->sgid,name_buf,LOGIN_NAME_MAX))
