@@ -128,7 +128,7 @@ static USER * getuserinfo(const char* optional_user){
       errno = 0;
       if((pw=getpwnam(optional_user)) == NULL){
         errnoExit("getpwnam()");
-        errExit("%s \"%s\" %s\n","user",optional_user,"notfound");
+        errExit("%s \"%s\" %s\n","user",optional_user,"not found");
       }
       useri.rid = pw->pw_uid;
       useri.rgid = pw->pw_gid;
@@ -217,7 +217,9 @@ main(int argc, char* argv[]){
             opt_mask.bits.v =1; //print verbose
             break;
           case '?':
-            errExit("%s%s\n","unkown option ",opterr);
+            fflush(stdout);
+            exit(EXIT_FAILURE);
+            //errExit("%s%s\n","unkown option ",opterr);
             break;
           default:
             errExit("%s\n","error occured while parsing options");
@@ -234,11 +236,33 @@ main(int argc, char* argv[]){
   char *user = (argc>1) ? argv[((optind>0)? optind : optind+1)] : NULL;
   USER* useri = getuserinfo(user);
 
+  if(opt_mask.byte&HELP){
+    printf("%s\n","Usage: id [OPTION]... [USERNAME]\n \
+                   Print user and group information\n \
+        -Z --context print only the security context of the current user\n \
+        -g --group   print only the effective group ID\n \
+        -G --groups  print all group IDS\n \
+        -n --name    print a name instead of a number, for -ugG\n \
+        -r --real    print the real ID instead of effective ID\n \
+        -u --user    print only the effective user ID\n  \
+        -h --help    display this help and exit\n \
+        -v --verbose print all process ID info including effective and saved IDs\n");
+  }
+
   if(opt_mask.byte&GROUP){
     (user==NULL)? printf("%d\n",useri->egid) : errExit("%s\n","invalid option when user is specifed");
     fflush(stdout);
     exit(EXIT_SUCCESS);
   }
+
+  if(opt_mask.byte&REAL)
+    errExit("%s\n","option -r not implemented");
+
+  if(opt_mask.byte&CONTX)
+    errExit("%s\n","option -Z not implemented");
+
+  if(opt_mask.byte&NAME)
+    errExit("%s\n","option -n not implemented");
 
   if(opt_mask.byte&USR){
     (user==NULL)? printf("%d\n",useri->eid) : errExit("%s\n","invalid option when user is specifed");
