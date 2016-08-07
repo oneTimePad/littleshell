@@ -57,7 +57,7 @@ static _BOOL getnamefromgid(gid_t gid, char *name, size_t buf_size){
     return FALSE;
   }
 
-  strncpy(name,grp->gr_name,buf_size);
+  strcpy(name,grp->gr_name);
   return TRUE;
 
 }
@@ -80,7 +80,7 @@ static _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
     return FALSE;
   }
 
-  strncpy(name,pw->pw_name,buf_size);
+  strcpy(name,pw->pw_name);
   return TRUE;
 }
 

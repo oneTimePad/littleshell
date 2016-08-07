@@ -18,14 +18,7 @@
 
 
 
-  pthread_mutex_t stdout_lock;
-
-
-
-
-
-
-
+pthread_mutex_t stdout_lock;
 
 /**
 * looks for processes to cleanup, called by separate thread
@@ -39,18 +32,12 @@ void process_clean(PMANAGER* pman){
   }
 }
 
-
-
-
-
-
+static char LPATH[] = "LPATH=./bin/:"
 
 
 int main(){
-
-
-
-
+  if(putenv(LPATH)!=0)
+    errnoExit("putenv");
 
   //create structure to hold process manager and lock for stdout
   PMANAGER * pman = (PMANAGER*)malloc(sizeof(PMANAGER));
@@ -157,6 +144,7 @@ int main(){
         pthread_mutex_unlock(&pman->mutex);
         continue;
       }
+      else if()
       //if token is an internal command
       short key;
       if((key=isInternalCommand(str))!=NONE){

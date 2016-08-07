@@ -6,7 +6,7 @@
 #include <signal.h>
 #include "executable.h"
 
-
+#define PATH "LPATH"
 
 /**
 * determines if the string points to an executable file
@@ -15,6 +15,94 @@
 **/
 _BOOL isExecutable(char* cmd){
   if(access(cmd,X_OK)==-1) return FALSE;
+  return TRUE;
+}
+
+
+/**
+* safely determine if ruid has access to this file
+* file_name: file to check
+* returns: status
+**/
+_BOOL safe_FXaccess(const char* file_name){
+  //determine if it exists, by attempting to open for reading
+  uid_t saved_euid = geteuid();
+  uid_t saved_egid = getegid();
+  uid_t ruid = getuid();
+  uid_t rgid = getgid();
+  seteuid(ruid);
+  setegid(rgid);
+
+  errno =0;
+  int fd;
+  //can we open for reading using out ruid/rgid?
+  if((fd=open(full_path,O_READ))==-1){
+    seteuid(saved_eid);
+    return FALSE;
+  }
+
+  struct stat stats;
+  //use fstat to avoid race condition that would occur with stat
+  if(fstat(fd,&stat)==-1)
+    return FALSE;
+  //can we execute it with this ruid?
+  if(ruid==stats.st_uid&&stats.st_mode&S_IXUSR){
+    if(close(fd)==-1){
+      seteuid(saved_euid);
+      setegid(saved_egid);
+      return FALSE;
+    }
+    return TRUE;
+  }
+  //can't, can we execute it with this rgid?
+  else if(rgid==stats.st_gid&&stat.st_mode&S_IXGRP){
+    if(close(fd)==-1){
+      seteuid(saved_euid);
+      setegid(saved_egid);
+      return FALSE;
+    }
+    return TRUE;
+  }
+
+  if(close(fd)==-1){
+    seteuid(saved_euid);
+    setegid(saved_egid);
+    return FALSE;
+  }
+  return FALSE; //nope we can't we this file
+}
+
+
+
+
+_BOOL isInPath(char *cmd,char* fpath,size_t size){
+  char full_path[PATH_LIM];
+  char * path_var;
+  #ifdef _GNU_SOURCE
+  if((path_var=secure_getenv(PATH))==NULL)
+    return FALSE;
+  #else
+  if((path_var=getenv(PATH))==NULL)
+    return FALSE;
+
+  int cur_index =0;
+  for(;*path_var!='\0';path_var++){
+    if(*path==':'){
+      cur_index = 0;
+      full_path[cur_index]= '\0';
+      strncat(full_path,cmd,strlen(cmd));
+
+    }
+    full_path[cur_index++] = *path
+
+
+
+
+  if(strlen(full_path)+1>size){
+    errno = ENOMEM;
+    return FALSE;
+  }
+  strcpy(fpath,full_path);
   return TRUE;
 }
 
