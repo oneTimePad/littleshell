@@ -18,6 +18,7 @@
 #include "ls.h"
 
 #define CURR_DIRECTORY "PWD"
+#define MAX_TIME_STRING 1024
 #define MAX_LONG_FORM_PRINT 2000
 #define LEN_MAX_64_SINT 20
 
@@ -35,7 +36,9 @@
 #define ISW(MODE,MASK) (MODE & MASK)? WRITE : NONE
 #define ISX(MODE,MASK) (MODE & MASK)? EXEC : NONE
 
+#define SPECIAL_BITS 1
 
+#define SPACES "   "
 
 /**
 * converts gid into corresponding name
@@ -117,10 +120,23 @@ static _BOOL formPath(const char* path, const struct dirent* entry,char* buff,si
 }
 
 static printPerm(const FILE_ENTRY *entry, int flags){
-  printf("%c%c%c%c%c%c%c%c%c%c",    (S_ISREG(entry->perm))? 'd' : '-'));
-                    (entry->perm&S_IRUSR) ? 'r' : '-'),
-                  (entry->perm&S_IWUSR) ? 'w' : '-'),
-                  (entry->perm&S_IXUSR) ? ()    : '-'
+  printf("%c%c%c%c%c%c%c%c%c%c",    (S_ISREG(entry->perm)) ? 'd' : '-',
+                  (entry->perm&S_IRUSR) ? 'r' : '-',
+                  (entry->perm&S_IWUSR) ? 'w' : '-',
+                  (entry->perm&S_IXUSR) ?
+                     (( (entry->perm&S_ISUID) && (flags&SPECIAL_BITS)) ? 's' : 'x'):
+                     (( (entry->perm&S_ISUID) && (flags&SPECIAL_BITS)) ? 'S' : '-'),
+                   (entry->perm&S_IRGRP) ? 'r' : '-',
+                   (entry->perm&S_IWGRP) ? 'w' : '-',
+                   (entry->perm&S_IXGRP) ?
+                      (( (entry->perm&S_ISGID) && (flags&SPECIAL_BITS)) ? 's' : 'x'):
+                      (( (entry->perm&S_ISGID) && (flags&SPECIAL_BITS)) ? 'S' : '-'),
+                  (entry->perm&S_IROTH) ?  'r' : '-',
+                  (entry->perm&S_IWOTH) ?  'w' : '-',
+                  (entry->perm&S_IXOTH) ?
+                    (((entry->perm&S_ISVTX) && (flags&SPECIAL_BITS)) ? 't' : 'x') :
+                    (((entry->perm&S_ISVTX) && (flags&SPECIAL_BITS)) ? 'T' : '-') );
+
 
 
 }
@@ -144,11 +160,12 @@ int main(int argc, char* argv[]){
 
 
     LS_OPTIONS opt_mask;
+    memset(&opt_mask,0,sizeof(LS_OPTIONS));
 
 
     int opt =0;
     int long_index = 0;
-    while((opt = getopt_long(argc,argv,"laAuiLoRsth", long_options, &long_index)) != -1){
+    while((opt = getopt_long(argc,argv,"laAuiLoRsthp", long_options, &long_index)) != -1){
         switch(opt){
 
           case 'l':
@@ -181,6 +198,9 @@ int main(int argc, char* argv[]){
           case 't':
             opt_mask.bits.t = 1; //sort by modification time, newest first
             break;
+          case 'p':
+            opt_mask.bits.p = 1; //print special bits;
+            break;
           case 'h':
             opt_mask.bits.h = 1; //display this help and exit
             break;
@@ -196,7 +216,7 @@ int main(int argc, char* argv[]){
         }
     }
 
-    char * file = (argc>1) ? argv[ ((optind>0) ? optind: optind+1) ] : secure_getenv(CURR_DIRECTORY);
+    char * file = (argc>1) ? ( (argv[ ((optind>0) ? optind: optind+1) ]==NULL) ? secure_getenv(CURR_DIRECTORY) : argv[ ((optind>0) ? optind: optind+1) ]) : secure_getenv(CURR_DIRECTORY);
 
 
 
@@ -207,13 +227,13 @@ int main(int argc, char* argv[]){
 
 
     int entry_ind = 0;
-    restrict FILE_ENTRY *entries = (FILE_ENTRY *)malloc(DEF_MAX_ENTRIES);
+    FILE_ENTRY *entries = (FILE_ENTRY *)malloc(DEF_MAX_ENTRIES*sizeof(FILE_ENTRY));
 
     struct dirent *entry;
     errno = 0;
     FILE_ENTRY *en = NULL;
-    while((entry=readdir(dir))!=NULL){ //traverse directory
-        en  = &entries[entry_ind++];
+    for(;(entry=readdir(dir))!=NULL;entry_ind++){ //traverse directory
+        en  = entries + entry_ind;
 
         if(!formPath(file,entry,en->full_path,PATH_LIM))
           errnoExit("formPath()");
@@ -245,8 +265,61 @@ int main(int argc, char* argv[]){
 
     int max_entries = entry_ind;
     entry_ind = 0;
+    char name_buf[LOGIN_NAME_MAX];
+    memset(name_buf,0,LOGIN_NAME_MAX);
+    char time_buf[MAX_TIME_STRING];
+    memset(time_buf,0,MAX_TIME_STRING);
     for(;entry_ind<max_entries;entry_ind++){
         en = entries+entry_ind;
+
+        //ignore the implied '.' and '..' entries
+        if(opt_mask.halfword&NO_DOT)
+          if(strcmp(basename(en->full_path),".") ==0 || strcmp(basename(en->full_path),"..")==0)
+            continue;
+
+        //if -A is not set, ignore all entries starting with a '.'
+        if(!(opt_mask.halfword&YES_DOT))
+          if(basename(en->full_path)[0] == '.')
+            continue;
+
+        //inode number
+        if(opt_mask.halfword&INODE){
+          printf("%ld",(long)en->ino_num);
+          printf(SPACES);
+        }
+        //long-form
+        if(opt_mask.halfword&LONG_LIST){
+              //permision mask
+              printPerm(en,((opt_mask.halfword&SPECIAL) ? SPECIAL_BITS: 0));
+              printf("%s",SPACES);
+              //owner of file
+              if(getnamefromuid(en->uid,name_buf,LOGIN_NAME_MAX))
+                errnoExit("getnamefromuid()");
+              printf("%s",name_buf);
+              printf("%s",SPACES);
+              //group owner of file
+              if(getnamefromgid(en->gid,name_buf,LOGIN_NAME_MAX))
+                errnoExit("getnamefromgid()");
+              printf("%s",name_buf);
+              printf("%s",SPACES);
+
+              //size of file in bytes
+              printf("%ld",(long)en->size);
+              printf("%s",SPACES);
+
+              //last modification time of file
+              struct tm* time_struc;
+              errno = 0;
+              if((time_struc=localtime(&en->t_mtime)) == NULL)
+                errnoExit("localtime()");
+
+              errno = 0;
+              if(strftime(time_buf,MAX_TIME_STRING,"%b %d %I:%M",time_struc)==0)
+                errnoExit("strftime()"); //checks if errno is not zero
+              printf("%s",time_buf);
+              printf("%s",SPACES);
+        }
+
         char* file_name = basename(en->full_path);
         printf("%s\n",file_name);
 

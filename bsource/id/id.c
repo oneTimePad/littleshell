@@ -219,11 +219,10 @@ main(int argc, char* argv[]){
           case '?':
             fflush(stdout);
             exit(EXIT_FAILURE);
-            //errExit("%s%s\n","unkown option ",opterr);
             break;
           default:
             errExit("%s\n","error occured while parsing options");
-
+            break;
 
       }
   }
