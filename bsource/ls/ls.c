@@ -294,6 +294,14 @@ int main(int argc, char* argv[]){
                 printf("%s",SPACES);
               }
 
+              //assume author is owner for now
+              if(opt_mask.halfword&AUTHOR){
+                if(getnamefromuid(en->uid,name_buf,LOGIN_NAME_MAX))
+                  errnoExit("getnamefromuid()");
+                printf("%s", name_buf);
+                printf("%s", SPACES);
+              }
+
               //size of file in bytes
               printf("%ld",(long)en->size);
               printf("%s",SPACES);
