@@ -12,11 +12,12 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
-#include "../errors.h"
+#include <getopt.h>
+#include "../../errors.h"
 #include "colors.h"
+#include "ls.h"
 
 #define CURR_DIRECTORY "PWD"
-#define MAX_FULL_PATH 512
 #define MAX_LONG_FORM_PRINT 2000
 #define LEN_MAX_64_SINT 20
 
@@ -33,80 +34,215 @@
 #define ISR(MODE,MASK) (MODE & MASK)? READ : NONE
 #define ISW(MODE,MASK) (MODE & MASK)? WRITE : NONE
 #define ISX(MODE,MASK) (MODE & MASK)? EXEC : NONE
+
+
+
+/**
+* converts gid into corresponding name
+* gid: id to converts
+* name: buffer with enough space to hold grp name and null-term
+* buf_size: size of buf
+* returns: int status, sets errno
+**/
+static _BOOL getnamefromgid(gid_t gid, char *name, size_t buf_size){
+
+  struct group * grp;
+  errno = 0;
+  if((grp = getgrgid(gid))==NULL)
+    return FALSE;
+  errno = 0;
+  if(NOMEMBUF(buf_size,grp->gr_name)){
+    errno = ENOMEM;
+    return FALSE;
+  }
+
+  strncpy(name,grp->gr_name,buf_size);
+  return TRUE;
+
+}
+
+/**
+* converts uid into corresponding name
+* uid: id to converts
+* name: buffer with enough space to hold usr name and null-term
+* buf_size: size of buf
+* returns: int status, sets errno
+**/
+static _BOOL getnamefromuid(uid_t uid, char *name, size_t buf_size){
+  struct passwd* pw;
+  errno = 0;
+  if((pw = getpwuid(uid)) == NULL)
+    return FALSE;
+  errno = 0;
+  if(NOMEMBUF(buf_size,pw->pw_name)){
+    errno = ENOMEM;
+    return FALSE;
+  }
+
+  strncpy(name,pw->pw_name,buf_size);
+  return TRUE;
+}
+
+
+/**
+* form full path for filename
+* path: set of directories to file
+* entry: ptr to dirent entry for file
+* buff: output buffer
+* size: size of output buffer
+* returns: status
+**/
+static _BOOL formPath(const char* path, const struct dirent* entry,char* buff,size_t size){
+
+  //compute the absolute path name of the file
+  size_t dir_len = strlen(path);
+  size_t file_len = strlen(entry->d_name);
+  size_t total_len = dir_len+file_len;
+
+  if(total_len+2>size){
+      errno = ENOMEM;
+      return FALSE;
+  }
+
+
+  strncpy(buff,path,dir_len);
+  buff[dir_len]='\0';
+  if(buff[dir_len-1]!='/')
+    strncat(buff,"/",(size_t)1);
+  strncat(buff,entry->d_name,file_len);
+
+  buff[((path[dir_len]=='/')? total_len : total_len+1)] = '\0';
+  return TRUE;
+
+}
+
+
+
+static struct option long_options[] = {
+  {"all",          no_argument,    0 , 'a'},
+  {"almost-all",   no_argument,    0 , 'A'},
+  {"author",       no_argument,    0 , 'u'},
+  {"inode",        no_argument,    0 , 'i'},
+  {"dereference",  no_argument,    0 , 'L'},
+  {"recursive",    no_argument,    0 , 'R'},
+  {"size",         no_argument,    0 , 's'},
+  {"help",         no_argument,    0 , 'h'},
+  { 0,             0,              0 ,   0 }
+};
+
+
 int main(int argc, char* argv[]){
 
 
 
-    char* file;
+    LS_OPTIONS opt_mask;
 
 
-    _BOOL show_hidden = FALSE;
-    _BOOL long_form = FALSE;
-
-    int opt;
-    while((opt=getopt(argc,argv,"al"))!=-1){
+    int opt =0;
+    int long_index = 0;
+    while((opt = getopt_long(argc,argv,"laAuiLoRsth", long_options, &long_index)) != -1){
         switch(opt){
 
           case 'l':
-            long_form = TRUE;
+            opt_mask.bits.l = 1; //long list form
             break;
           case 'a':
-            show_hidden = TRUE;
+            opt_mask.bits.a = 1; //do not  ignore entries with .
+            break;
+          case 'A':
+            opt_mask.bits.A = 1; //do not list implied . and ..
+            break;
+          case 'u':
+            opt_mask.bits.u = 1; //with -l print the author of each file
+            break;
+          case 'i':
+            opt_mask.bits.i = 1; //print the index number of each file
+            break;
+          case 'L':
+            opt_mask.bits.L = 1; //dereference symbolic links
+            break;
+          case 'o':
+            opt_mask.bits.o = 1; //like -l, but do not list group information
+            break;
+          case 'R':
+            opt_mask.bits.R = 1; //list subdirectories recursively
+            break;
+          case 's':
+            opt_mask.bits.s = 1; //sort by file size
+            break;
+          case 't':
+            opt_mask.bits.t = 1; //sort by modification time, newest first
+            break;
+          case 'h':
+            opt_mask.bits.h = 1; //display this help and exit
+            break;
+          case '?':
+            fflush(stdout);
+            exit(EXIT_FAILURE);
             break;
           default:
-            errExit("unknown flag -%s\n",opt);
+            errExit("%s\n","error occured while parsing options");
             break;
+
 
         }
     }
 
-    if(argc < optind+1) //if no file is specified assume cwd
-      file = secure_getenv(CURR_DIRECTORY);
-    else
-      file = argv[optind];
+    char * file = (argc>1) ? argv[ ((optind>0) ? optind: optind+1) ] : secure_getenv(CURR_DIRECTORY);
+
 
 
     DIR* dir;
 
-    if((dir=opendir(file))==(DIR*)NULL)
+    if((dir=opendir(file))==NULL)
       errnoExit("opendir()");
 
 
+    int entry_ind = 0;
+    FILE_ENTRY *entries = (FILE_ENTRY *)malloc(DEF_MAX_ENTRIES);
+
     struct dirent *entry;
-
+    errno = 0;
+    FILE_ENTRY *en = NULL;
     while((entry=readdir(dir))!=NULL){ //traverse directory
-        //check if we can show hidden files
-        if(!show_hidden)
-          if(entry->d_name[0]=='.')
-            continue;
+        en  = &entries[entry_ind++];
 
-        //compute the absolute path name of the file
-        size_t dir_len = strlen(file);
-        size_t file_len = strlen(entry->d_name);
-        size_t total_len = dir_len+file_len;
-
-        if(total_len+1>=MAX_FULL_PATH-2)
-            errExit("%s\n","filename is too long");
-
-
-        char full_path[MAX_FULL_PATH];
-        memset(full_path,0,MAX_FULL_PATH);
-        strncpy(full_path,file,dir_len);
-        full_path[dir_len]=0x0;
-        if(file[dir_len-1]!='/')
-          strncat(full_path,"/",(size_t)1);
-        strncat(full_path,entry->d_name,file_len);
-
-        full_path[((file[dir_len]=='/')? total_len : total_len+1)] = 0x0;
+        if(!formPath(file,entry,en->full_path,PATH_LIM))
+          errnoExit("formPath()");
 
         //get file stats
         struct stat file_stat;
-        if(stat(full_path,&file_stat)==-1)
-          errnoExit("stat()");
+        if(((opt_mask.halfword&DEREF)? stat(en->full_path,&file_stat) : lstat(en->full_path,&file_stat)) == -1)
+          errnoExit((opt_mask.halfword&DEREF)? "stat()" : "lstat()");
 
+        en->perm    = file_stat.st_mode;
+        en->ino_num = file_stat.st_ino;
+        en->hlinks  = file_stat.st_nlink;
+        en->uid     = file_stat.st_uid;
+        en->gid     = file_stat.st_gid;
+        en->size    = file_stat.st_size;
+        en->phy_blks= file_stat.st_blocks;
+        en->t_atime = file_stat.st_atime;
+        en->t_mtime = file_stat.st_mtime;
+        en->t_ctime = file_stat.st_ctime;
 
-        mode_t file_mode = file_stat.st_mode;
+        errno = 0;
+    }
 
+    if(errno!=0){
+      perror("readdir_r()");
+      exit(EXIT_FAILURE);
+    }
+
+    int max_entries = entry_ind;
+    entry_ind = 0;
+    for(;entry_ind<max_entries;entry_ind++){
+        en = entries+entry_ind;
+        char* file_name = basename(en->full_path);
+        printf("%s\n",file_name);
+    }
+
+        /*
         int cforeground=WHITE;
         int cbackground=-1;
         //check if not regular file
@@ -233,12 +369,8 @@ int main(int argc, char* argv[]){
 
         }
         cprintf(BRIGHT,cforeground,cbackground,"%s\n",entry->d_name);
-    }
+    }*/
 
-    if(errno!=0){
-      perror("readdir_r()");
-      exit(EXIT_FAILURE);
-    }
 
     exit(EXIT_SUCCESS);
 }
