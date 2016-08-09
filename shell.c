@@ -32,7 +32,7 @@ void process_clean(PMANAGER* pman){
   }
 }
 
-static char LPATH[] = "LPATH=./bin/:"
+static char LPATH[] = "LPATH=./bin/:";
 
 
 int main(){
@@ -126,30 +126,32 @@ int main(){
       continue;
     }
 
-
+    char file_full_path[PATH_LIM];
+    _BOOL in_path;
     char * str;
     while((str=getTokenNextCommand(curr_tkn))!=NULL){
+
+      //if token is an internal command
+      short key;
+      if((key=isInternalCommand(str))!=NONE){
+        if(!internal_command(key,pman,str,curr_tkn))
+          errnoExit("internal_command()");
+      }
+
       //if token is an an executable
-      if(isExecutable(str)){
+      if(isExecutable(str,file_full_path,PATH_LIM,&in_path)){
         //fetch the background gpid
         int backgpid = -1;
         pthread_mutex_lock(&pman->mutex);
         backgpid = pman->background_group;
         pthread_mutex_unlock(&pman->mutex);
 
-        execute(pman,str,curr_tkn,pman->foreground_group,&backgpid);
+        execute(pman,((in_path) ? file_full_path : str),curr_tkn,pman->foreground_group,&backgpid);
         //edit it since it might have been -1 before
         pthread_mutex_lock(&pman->mutex);
         pman->background_group = backgpid;
         pthread_mutex_unlock(&pman->mutex);
         continue;
-      }
-      else if()
-      //if token is an internal command
-      short key;
-      if((key=isInternalCommand(str))!=NONE){
-        if(!internal_command(key,pman,str,curr_tkn))
-          errnoExit("internal_command()");
       }
       //unrecognized token
       else

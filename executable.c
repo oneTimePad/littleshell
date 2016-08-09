@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
+#include "utils.h"
 #include "executable.h"
 
 #define PATH "LPATH"
@@ -11,42 +13,68 @@
 /**
 * determines if the string points to an executable file
 * cmd: token to test
+* fpath: if it is in the path, we needs it's full path, returns full path
+* size: size of fpath
 * returns: whether it is an executable
 **/
-_BOOL isExecutable(char* cmd){
-  if(access(cmd,X_OK)==-1) return FALSE;
-  return TRUE;
+_BOOL isExecutable(char* cmd,char* fpath, size_t size,_BOOL* in_path){
+  if(in_path==NULL || fpath== NULL){
+    errno = EINVAL;
+    return FALSE;
+  }
+  if(safe_access(cmd,A_XOK)){
+     *in_path = FALSE;
+     return TRUE; //if it specifed by absolute path
+   }
+  if(errno != ENOENT && errno!=0) return FALSE;
+
+  if(isInPath(cmd,fpath,size)){
+    *in_path = TRUE;
+    return TRUE; //if it is located in PATH
+  }
+  return FALSE;
 }
 
 
 
 
-
-
-
-_BOOL isInPath(char *cmd,char* fpath,size_t size){
+/**
+* checks if file is in `path` and can be executed
+* file: file to check
+* fpath: buffer to hold location of file
+* size : size of fpath
+* returns: status
+**/
+_BOOL isInPath(char *file,char* fpath,size_t size){
   char full_path[PATH_LIM];
   char * path_var;
+
   #ifdef _GNU_SOURCE
   if((path_var=secure_getenv(PATH))==NULL)
     return FALSE;
   #else
   if((path_var=getenv(PATH))==NULL)
     return FALSE;
+  #endif
 
   int cur_index =0;
-  for(;*path_var!='\0';path_var++){
-    if(*path==':'){
-      cur_index = 0;
+  _BOOL found = FALSE;
+  //search all files in path
+
+  for(;;path_var++){
+    if(*path_var==':' || *path_var=='\0'){
       full_path[cur_index]= '\0';
-      strncat(full_path,cmd,strlen(cmd));
-      if()
-
+      cur_index = 0;
+      strcat(full_path,file);
+      //test if executable
+      if(safe_access(full_path,A_XOK))
+        break;
+      if(*path_var=='\0')
+        return FALSE;
     }
-    full_path[cur_index++] = *path
+    full_path[cur_index++] = *path_var;
 
-
-
+  }
 
   if(strlen(full_path)+1>size){
     errno = ENOMEM;
@@ -186,9 +214,12 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
     getTokenNextCommand(tkns);
     //if the next program after the pipe is not valid
     char* second_prog ="";
-    if((second_prog=testTokenNextCommand(tkns))==NULL || ! isExecutable(second_prog)){
+    char full_path[PATH_LIM];
+    _BOOL in_path;
+    if((second_prog=testTokenNextCommand(tkns))==NULL || ! isExecutable(second_prog,full_path,PATH_LIM,&in_path)){
       return FALSE;
     }
+    second_prog = (in_path) ? full_path : second_prog;
     getTokenNextCommand(tkns);
     //create pipe
     int pipe_fd_pipe[2];

@@ -1,23 +1,31 @@
-all: shell
+all: shell id ls
 
-shell: executable.o processmanager.o tokenizer.o errors.o internal.o
-	gcc -pthread -o shell shell.c executable.o processmanager.o tokenizer.o errors.o internal.o
+shell: executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
+	gcc -pthread -g -o shell shell.c executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
 
 
-executable.o: bool.h tokenizer.h processmanager.h executable.h
-	gcc -c executable.c
+executable.o: bool.h tokenizer.h processmanager.h utils.h executable.h
+	gcc -g -c executable.c
+
+utils.o: bool.h errors.h
+	gcc -g -c utils.c
 
 processmanager.o: bool.h processmanager.h
-	gcc -c processmanager.c
+	gcc -g -c processmanager.c
 
 tokenizer.o: bool.h tokenizer.h
-	gcc -c tokenizer.c
+	gcc -g -c tokenizer.c
 
 errors.o: bool.h errors.h
 	gcc -c errors.c
 
 internal.o: bool.h processmanager.h tokenizer.h
-	gcc -c internal.c
+	gcc -g -c internal.c
+
+ls: bool.h errors.h ./bsource/ls/ls.h
+	gcc -o ./bin/ls ./bsource/ls/ls.c errors.c
+id: bool.h errors.h ./bsource/id/id.h
+	gcc -o ./bin/id ./bsource/id/id.c errors.c
 
 clean:
-	rm -rf shell *.o
+	rm -rf shell *.o ./bin/ls ./bin/id

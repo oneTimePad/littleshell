@@ -1,4 +1,13 @@
-
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <string.h>
+#include <malloc.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include "errors.h"
+#include "utils.h"
 
 
 /**
@@ -18,16 +27,17 @@ _BOOL safe_access(const char* file_name, int flags){
   errno =0;
   int fd;
   //can we open for reading using out ruid/rgid?
-  if((fd=open(full_path,(flags&A_WOK) ? ((flags&A_ROK) ? O_RDWR : O_WRITE ):O_READ))==-1){
-    seteuid(saved_eid);
+  if((fd=open(file_name,(flags&A_WOK) ? ((flags&A_ROK) ? O_RDWR : O_WRONLY ):O_RDONLY))==-1){
+    seteuid(saved_euid);
+    setegid(saved_egid);
     return FALSE;
   }
 
   struct stat stats;
   //use fstat to avoid race condition that would occur with stat
-  if(fstat(fd,&stat)==-1)
+  if(fstat(fd,&stats)==-1)
     return FALSE;
-  if(flags&A_XOR){
+  if(flags&A_XOK){
     //can we execute it with this ruid?
     if(ruid==stats.st_uid&&stats.st_mode&S_IXUSR){
         if(close(fd)==-1){
@@ -38,7 +48,7 @@ _BOOL safe_access(const char* file_name, int flags){
         return TRUE;
       }
       //can't, can we execute it with this rgid?
-      else if(rgid==stats.st_gid&&stat.st_mode&S_IXGRP){
+      else if(rgid==stats.st_gid&&stats.st_mode&S_IXGRP){
         if(close(fd)==-1){
           seteuid(saved_euid);
           setegid(saved_egid);
@@ -58,11 +68,12 @@ _BOOL safe_access(const char* file_name, int flags){
 
 
 
-#include "my_env.h"
+//#include "my_env.h"
 
 /**
 * get current environ size
 **/
+/*
 static ssize_t getenvsize(void){
   ssize_t size = 0;
   char** my_environ = environ;
@@ -71,12 +82,13 @@ static ssize_t getenvsize(void){
 
   return size;
 
-}
+}*/
 
 
 /**
 * get current environ size
 **/
+/*
 static ssize_t getenvsize(void){
   ssize_t size = 0;
   char** my_environ = environ;
@@ -85,13 +97,14 @@ static ssize_t getenvsize(void){
 
   return size;
 
-}
+}*/
 
 
 /**
 * removes all allocated strings
 * returns: status
 **/
+/*
 static short free_env(void){
   if(environ == NULL) return -1;
   char** my_environ = environ;
@@ -100,7 +113,7 @@ static short free_env(void){
       free(*my_environ);
 
   return 0;
-}
+}*/
 
 
 
@@ -115,6 +128,7 @@ static short free_env(void){
 * also doesn't make a good reuse of memory, just keeps mallocing and freeing
 * returns: success status
 **/
+/*
 int safe_setenv(const char *name,const char *value, int overwrite){
     if(environ == NULL) return -1;
     if(overwrite!=0 && overwrite!=1) return -1; //only accept false or true
@@ -152,11 +166,29 @@ int safe_setenv(const char *name,const char *value, int overwrite){
           return -1;
         memcpy(entry,*my_environ,new_entry_size);
 
+        size_t entry_len = strlen(entry);
+        size_t putenv_len = strlen(putenv_cpy);
+        _BOOL is_big_enough = (strlen(*my_environ)+1 < strlen(putenv_cpy)+1) ? FALSE : TRUE;
+
 
         entry = entry+strlen(*my_environ)+1; //access beggining of where the MAGIC_STRING would be
-        if(strncmp(entry,MALLOC_MAGIC_STRING,MAGIC_STRING_LEN+1)==0) //if found, we free it since we malloc'd it
+
+        int  no_found_magic = strncmp(entry,MALLOC_MAGIC_STRING,MAGIC_STRING_LEN+1);
+        if(!no_found_magic&&!is_big_enough){ //if magic string found and current is not big enough to hold new
           free(*my_environ);
-        *my_environ = putenv_cpy; //add the new entry
+          *my_environ = putenv_cpy; //add the new entry
+        }
+        else if(no_found_magic&&!is_big_enough){ //if no magic string and is not big enough
+          *my_environ = putenv_cpy;
+          free(putenv_cpy);
+        }
+        else if(is_big_enough){ //if is big enough
+          size_t left_over = (entry_len-putenv_len);
+          strcpy(*my_environ,putenv_cpy);
+          memset(*(my_environ)+putenv_len+1,'H',left_over);
+          free(putenv_cpy);
+        }
+
         free(orig_entry);
     }
     else if(getenv_result==NULL){
@@ -185,7 +217,7 @@ int safe_setenv(const char *name,const char *value, int overwrite){
     return (getenv(name)!=NULL) ? 0 : -1;
 
 }
-
+*/
 /**
 * unsets an environment variable and frees it allocated by setenv
 * partially fixes memory leak problem with setenv in linux (roundabout way)
@@ -193,6 +225,7 @@ int safe_setenv(const char *name,const char *value, int overwrite){
 * when name = "=", all allocated strings are removed
 * returns: status
 **/
+/*
 int safe_unsetenv(const char *name){
   if(environ == NULL) return -1;
   if(name==NULL) return -1;
@@ -219,4 +252,4 @@ int safe_unsetenv(const char *name){
 
   return (getenv(name)==NULL)? 0: -1;
 
-}
+}*/
