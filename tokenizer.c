@@ -89,7 +89,8 @@ _BOOL initializeTokens(TOKENS** tkn,char * input,int size){
 void destroyTokens(TOKENS* tkn){
   char** cmds = tkn->cmd_tokens;
   for(;*cmds!=NULL;cmds++) free(*cmds);
-  free(tkn);
+  //free(tkn);
+
 }
 /**
 * look at the next token but don't update

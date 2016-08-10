@@ -1,6 +1,6 @@
 #ifndef SETFACL_H
 #define SETFACL_H
-
+#include "../../bool.h"
 
 #define SET         1
 #define MODIFY      2
@@ -20,20 +20,27 @@
 #define PHYSICAL    32048
 #define VERSION     64096
 #define HELP        128192
-#define EOF         256384
+#define EOFF        256384
 #define STIN        512768
 
 #define MAX_ACL_ENTRIES 10
 
+#define ACL_OK 1
 
 #define READ  1
 #define WRITE 2
 #define EXEC  4
 
+//getopt_long options
 typedef union _SETFACL_OPTIONS {
 
   struct{
+    char s:1;
     char m:1;
+    char x:1;
+    char S:1;
+    char M:1;
+    char X:1;
     char b:1;
     char k:1;
     char n:1;
@@ -52,9 +59,9 @@ typedef union _SETFACL_OPTIONS {
 
   unsigned int word;
 
-
 } SFA_OPTIONS;
 
+//acl entry permission mask
 typedef union ACL_PERM_MASK{
   struct{
     char r:1;
@@ -65,15 +72,19 @@ typedef union ACL_PERM_MASK{
   unsigned char nibble:4;
 } PERM;
 
+//acl entry
 typedef struct _ACLENTRY{
   acl_tag_t tag;
-  uid_t u_qual
-  git_t g_qual;
-  PERM  permissions;
+  union{
+    uid_t u_qual;
+    gid_t g_qual;
+  }ids;
+  PERM  perm;
 
 } ACLENTRY;
 
 _BOOL setpermzero(PERM*);
+_BOOL short_parse_acl(const char *,size_t,ACLENTRY *, int,int);
 
 
 #endif

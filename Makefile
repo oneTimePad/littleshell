@@ -1,4 +1,4 @@
-all: shell id ls
+all: shell id ls setfacl
 
 shell: executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
 	gcc -pthread -g -o shell shell.c executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
@@ -27,5 +27,8 @@ ls: bool.h errors.h ./bsource/ls/ls.h
 id: bool.h errors.h ./bsource/id/id.h
 	gcc -o ./bin/id ./bsource/id/id.c errors.c
 
+setfacl: bool.h errors.h  ./bsource/setfacl/setfacl.h
+	gcc -g -o ./bin/setfacl ./bsource/setfacl/setfacl.c errors.c -lacl
+
 clean:
-	rm -rf shell *.o ./bin/ls ./bin/id
+	rm -rf shell *.o ./bin/*

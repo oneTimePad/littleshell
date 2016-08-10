@@ -161,6 +161,7 @@ int main(){
     }
 
     //clean up
+
     destroyTokens(curr_tkn);
   }
 
