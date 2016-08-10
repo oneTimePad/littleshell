@@ -1,12 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <string.h>
-#include <malloc.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include "errors.h"
+
 #include "bool.h"
 //max length varies too much on each system, just choose something small
 //warning: but might result in overflowing total env size

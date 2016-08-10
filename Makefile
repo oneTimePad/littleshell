@@ -23,7 +23,7 @@ internal.o: bool.h processmanager.h tokenizer.h
 	gcc -g -c internal.c
 
 ls: bool.h errors.h ./bsource/ls/ls.h
-	gcc -o ./bin/ls ./bsource/ls/ls.c errors.c
+	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl
 id: bool.h errors.h ./bsource/id/id.h
 	gcc -o ./bin/id ./bsource/id/id.c errors.c
 

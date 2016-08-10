@@ -13,6 +13,7 @@
 #include <grp.h>
 #include <time.h>
 #include <getopt.h>
+#include <sys/acl.h>
 #include "../../errors.h"
 #include "colors.h"
 #include "ls.h"
@@ -23,6 +24,26 @@
 #define MAX_TIME_STRING 1024
 #define SPECIAL_BITS 1
 #define SPACES "   "
+
+
+
+static inline _BOOL validateMask(const LS_OPTIONS* mask){
+  int count =0;
+  //mutially exclusive options
+  count += ((mask->halfword&LONG_LIST) ? 1 : 0);
+
+  int requires_long_form=0;
+  //these options require -l be specified
+  requires_long_form += ((mask->halfword&NO_GRP)   ?  1 : 0);
+  requires_long_form += ((mask->halfword&AUTHOR)   ?  1 : 0);
+  requires_long_form += ((mask->halfword&SPECIAL)  ?  1 : 0);
+  
+  return (count>1 || (!(mask->halfword&LONG_LIST) && requires_long_form!=0)) ? FALSE : TRUE;
+
+}
+
+
+
 
 /**
 * converts gid into corresponding name
@@ -120,7 +141,8 @@ static printPerm(const FILE_ENTRY *entry, int flags){
                   (entry->perm&S_IXOTH) ?
                     (((entry->perm&S_ISVTX) && (flags&SPECIAL_BITS)) ? 't' : 'x') :
                     (((entry->perm&S_ISVTX) && (flags&SPECIAL_BITS)) ? 'T' : '-') );
-
+  if(entry->acl_aware)
+    printf("%s","+");
 
 
 }
@@ -205,6 +227,8 @@ int main(int argc, char* argv[]){
 
     char * file = (argc>1) ? ( (argv[ ((optind>0) ? optind: optind+1) ]==NULL) ? secure_getenv(CURR_DIRECTORY) : argv[ ((optind>0) ? optind: optind+1) ]) : secure_getenv(CURR_DIRECTORY);
 
+    if(!validateMask(&opt_mask))
+      errExit("%s\n","One or more of the option combinations specified is invalid. Please see --help");
 
 
     DIR* dir;
@@ -243,6 +267,28 @@ int main(int argc, char* argv[]){
         en->t_ctime = file_stat.st_ctime;
 
         errno = 0;
+
+        acl_t acl_stats;
+        if((acl_stats=acl_get_file(en->full_path,ACL_TYPE_ACCESS)) == (acl_t)NULL)
+          errnoExit("acl_get_file()");
+        acl_entry_t entry;
+        int entry_id;
+        acl_tag_t tag;
+        en->acl_aware = FALSE;
+        for(entry_id=ACL_FIRST_ENTRY;;entry_id=ACL_NEXT_ENTRY){
+          errno =0;
+          if(acl_get_entry(acl_stats,entry_id,&entry)!=1)
+            break;
+
+          if(acl_get_tag_type(entry,&tag)==-1)
+            errnoExit("acl_get_tag_type()");
+
+          if(tag==ACL_USER || tag==ACL_GROUP)
+            en->acl_aware = TRUE;
+
+        }
+        if(errno!=0)
+          errnoExit("acl_get_entry()");
     }
 
     if(errno!=0){
@@ -351,6 +397,8 @@ int main(int argc, char* argv[]){
 
               }
         }
+
+
 
         char* file_name = basename(en->full_path);
         printf("%s\n",file_name);

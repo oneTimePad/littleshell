@@ -16,6 +16,8 @@
 #define SPECIAL   2048
 #define VERBOSE   4096
 
+#include "../../bool.h"
+
 #ifdef _GNU_SOURCE
 #include <linux/limits.h>
 #define PATH_LIM PATH_MAX+NAME_MAX+1
@@ -36,6 +38,7 @@ typedef struct _FILE_ENTRY{
     time_t   t_atime; //access time
     time_t   t_mtime; //modification time
     time_t   t_ctime; //status change time
+    _BOOL    acl_aware;
     char     full_path[PATH_LIM];
 } FILE_ENTRY;
 
@@ -57,7 +60,7 @@ typedef union _LS_OPTIONS{
     unsigned char h:1; //display this help and exit
     unsigned char p:1; //print special bits in perm maks
     unsigned char v:1; //verbose
-    unsigned char unk2:1;
+    unsigned char c:1; //print ACL only
     unsigned char unk3:1;
     unsigned char unk4:1;
   } bits;
