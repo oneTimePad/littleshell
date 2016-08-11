@@ -97,6 +97,80 @@ static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
     errnoExit("acl_set_permset()");
 }
 
+
+/**
+* partitions the list of entries in to ptrs to special entries
+* list: ptrs to entries
+* num_entries: num of entries in list
+* user_obj: ptr to *user_obj
+* group_obj: ptr to *group_obj
+* ..same for other and mask
+* user: array of ptrs to ptrs of ACL_USER entries
+* group: same as user
+* returns (sets double ptrs) status, will exit though
+**/ //need to fix this
+_BOOL acl_partition(ACLENTRY *list,int num_entries,ACLENTRY **user_obj,ACLENTRY **group_obj,ACLENTRY **other, ACLENTRY **mask,ACLENTRY *user, ACLENTRY *group,int user_size,int group_size, int *num_user,int *num_group){
+
+
+      ACLENTRY *user_obj_tm  = NULL; //new user_obj
+      ACLENTRY *group_obj_tm = NULL; //new group_obj
+      ACLENTRY *other_tm     = NULL; //new other
+      ACLENTRY *mask_tm      = NULL; //new mask
+      ACLENTRY *user_tm[MAX_ACL_ENTRIES]; //new users
+      ACLENTRY *group_tm[MAX_ACL_ENTRIES]; //new groups
+      int user_ind  = 0;
+      int group_ind = 0;
+
+      //store pointers to acl entries that are being added
+      //so we can see if current one needs to be modifed, instance access later
+      int cur_index = 0; //for all ACLENTRY's
+      for(;cur_index<num_entries;cur_index){
+        ACLENTRY *acl_entry = (list+cur_index);
+
+        switch (acl_entry->tag) {
+          case ACL_USER_OBJ:
+            user_obj_tm = acl_entry;
+            break;
+          case ACL_GROUP_OBJ:
+            group_obj_tm = acl_entry;
+            break;
+          case ACL_GROUP:
+            if(group_ind>=group_size){
+              errno = ENOMEM;
+              return FALSE;
+            }
+            group_tm[group_ind++] = acl_entry;
+            break;
+          case ACL_USER:
+            if(user_ind>=user_size){
+                errno = ENOMEM;
+                return FALSE;
+            }
+            user_tm[user_ind++] = acl_entry;
+            break;
+          case ACL_OTHER:
+            other_tm = acl_entry;
+            break;
+          case ACL_MASK:
+            mask_tm = acl_entry;
+            break;
+          default:
+            errExit("%s %ld\n","Received unexpected tag:",(long)acl_entry->tag);
+            break;
+        }
+      }
+      *user_obj = user_obj_tm;
+      *group_obj = group_obj_tm;
+      *mask = mask_tm;
+      *other = other_tm;
+      *num_user = user_ind;
+      *num_group = group_ind;
+      return TRUE;
+
+}
+
+
+
 /**
 *sets an a new acl
 *file: file whose acl to change
@@ -152,41 +226,15 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
   int user_ind  = 0;
   int group_ind = 0;
 
-  //store pointers to acl entries that are being added
-  //so we can see if current one needs to be modifed, instance access later
-  int cur_index = 0; //for all ACLENTRY's
-  for(;cur_index<num_entries;cur_index){
-    ACLENTRY *acl_entry = (list+cur_index);
+  if(!acl_partition(list,num_entries,&user_obj,&group_obj,&other,&mask,user,group,MAX_ACL_ENTRIES,MAX_ACL_ENTRIES,&user_ind,&group_ind))
+      errnoExit("acl_partition()");
 
-    switch (acl_entry->tag) {
-      case ACL_USER_OBJ:
-        user_obj = acl_entry;
-        break;
-      case ACL_GROUP_OBJ:
-        group_obj = acl_entry;
-        break;
-      case ACL_GROUP:
-        group[group_ind++] = acl_entry;
-        break;
-      case ACL_USER:
-        user[user_ind++] = acl_entry;
-        break;
-      case ACL_OTHER:
-        other = acl_entry;
-        break;
-      case ACL_MASK:
-        mask = acl_entry;
-        break;
-      default:
-        errExit("%s %ld\n","Received unexpected tag:",(long)acl_entry->tag);
-        break;
-    }
-  }
+  int cur_index = 0;
   int entry_id = ACL_FIRST_ENTRY;
   acl_entry_t entry; //go through all current acl entries
   uid_t *uid;
   gid_t *gid;
-  for(;acl_get_entry(acl,entry_id,&entry)!=1;entry_id=ACL_NEXT_ENTRY){
+  for(;acl_get_entry(acl,entry_id,&entry)!=NO_MORE_ENTRIES;entry_id=ACL_NEXT_ENTRY){
       acl_tag_t tag;
       if(acl_get_tag_type(entry,&tag)!=ACL_OK)
         errnoExit("acl_get_tag_type()");
@@ -254,7 +302,33 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
 
 
 void rem_acl(const char *file,ACLENTRY *list, int num_entries){
-  
+  acl_t acl;
+
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
+    errnoExit("acl_get_file()");
+
+
+    ACLENTRY *user_obj  = NULL; //new user_obj
+    ACLENTRY *group_obj = NULL; //new group_obj
+    ACLENTRY *other     = NULL; //new other
+    ACLENTRY *mask      = NULL; //new mask
+    ACLENTRY *user[MAX_ACL_ENTRIES]; //new users
+    ACLENTRY *group[MAX_ACL_ENTRIES]; //new groups
+    int user_ind  = 0;
+    int group_ind = 0;
+
+    if(!acl_partition(list,num_entries,&user_obj,&group_obj,&other,&mask,user,group,MAX_ACL_ENTRIES,MAX_ACL_ENTRIES,&user_ind,&group_ind))
+        errnoExit("acl_partition()");
+
+    int entry_id = ACL_FIRST_ENTRY;
+    acl_entry_t entry; //go through all current acl entries
+
+    for(;acl_get_entry(acl,entry_id,&entry)!=NO_MORE_ENTRIES;entry_id=ACL_NEXT_ENTRY){
+
+
+
+
+    }
 }
 
 

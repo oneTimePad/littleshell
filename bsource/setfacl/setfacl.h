@@ -26,6 +26,7 @@
 #define MAX_ACL_ENTRIES 10
 
 #define ACL_OK 0
+#define NO_MORE_ENTRIES 1
 
 #define READ  1
 #define WRITE 2
