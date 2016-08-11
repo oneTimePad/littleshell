@@ -25,7 +25,7 @@
 
 #define MAX_ACL_ENTRIES 10
 
-#define ACL_OK 1
+#define ACL_OK 0
 
 #define READ  1
 #define WRITE 2
@@ -78,6 +78,7 @@ typedef struct _ACLENTRY{
   union{
     uid_t u_qual;
     gid_t g_qual;
+    long  marked; //useful in some functions
   }ids;
   PERM  perm;
 

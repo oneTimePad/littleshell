@@ -15,7 +15,7 @@
 * pw_name : username
 * returns: uid or -1 on error
 **/
-__attribute__((fastcall)) static inline uid_t getuidfromname(const char *pw_name){
+static inline uid_t getuidfromname(const char *pw_name){
   struct passwd* pw;
   if((pw=getpwnam(pw_name))==NULL)
     return (uid_t)-1;
@@ -27,12 +27,234 @@ __attribute__((fastcall)) static inline uid_t getuidfromname(const char *pw_name
 * gr_name: group name
 * retruns: gid or -1 on error
 **/
-__attribute__((fastcall)) static inline gid_t getgidfromname(const char *gr_name){
+static inline gid_t getgidfromname(const char *gr_name){
   struct group* gr;
   if((gr=getgrnam(gr_name))==NULL)
     return (gid_t)-1;
   return gr->gr_gid;
 }
+
+/**
+* update a perm_set_t in entry to the one in aclentry
+* entry: acl entry to change from in-memory
+* acl_entry: where to retrieve new perms from
+* exits on error
+**/
+static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
+
+  if(acl_entry == NULL) return;
+
+  acl_permset_t perm_set;
+  if(acl_get_permset(entry,&perm_set)!=0)
+    errnoExit("acl_get_perm()");
+
+  PERM perm = acl_entry->perm;
+  if(((perm.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : 0)!=0)
+    errnoExit("acl_add_perm()");
+  if(((perm.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : 0)!=0)
+    errnoExit("acl_add_perm()");
+  if(((perm.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): 0)!=0)
+    errnoExit("acl_add_perm()");
+
+  if(acl_set_perm(entry,permset)!=0)
+    errnoExit("acl_set_perm()");
+}
+
+/**
+* creates a new acl_entry_t given acl and acl_entry
+* acl: ptr to acl to add to
+* acl_entry: where to get tag,qualifier, and perms
+* exits on error
+**/
+static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
+  acl_entry_t entry; //create the entry
+  if((acl_create_entry(acl,&entry))!=ACL_OK)
+    errnoExit("acl_create_entry()");
+  //set the tag
+  if((acl_set_tag_type(entry,acl_entry->tag))!=ACL_OK)
+    errnoExit("acl_set_tag_type()");
+  //set the qualifier if necessary
+  if(acl_entry->tag == ACL_USER)
+    if(acl_set_qualifier(entry,&acl_entry->ids.u_qual)!=ACL_OK)
+      errnoExit("acl_set_qualifier()");
+  else if(acl_entry->tag == ACL_GROUP)
+    if(acl_set_qualifier(entry,&acl_entry->ids.g_qual)!=ACL__OK)
+      errnoExit("acl_set_qualifier()");
+
+  acl_permset_t permset;
+  //set the permissions
+  if(acl_entry->perm.nibble&READ)
+    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
+      errnoExit("acl_add_perm()");
+  if(acl_entry->perm.nibble&WRITE)
+    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
+      errnoExit("acl_add_perm()");
+  if(acl_entry->perm.nibble&EXEC)
+    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
+      errnoExit("acl_add_perm()");
+
+  if(acl_set_permset(entry,permset)!=ACL_OK)
+    errnoExit("acl_set_permset()");
+}
+
+/**
+*sets an a new acl
+*file: file whose acl to change
+*list: list of entries to make new acl
+*num_entries: number of entries
+* exits on error
+**/
+void acl_set(const char *file,ACLENTRY *list, int num_entries){
+  acl_t acl;
+
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
+    errnoExit("acl_get_file()");
+
+  acl_t new_acl; //create new acl
+  if((new_acl=acl_init(num_entries))== (acl_t)NULL)
+    errnoExit("acl_init()");
+
+  int cur_index = 0; //for all ACLENTRY's
+  for(;cur_index<num_entries;cur_index){
+    ACLENTRY *acl_entry = (entries+cur_index);
+    acl_create(&new_acl,acl_entry);
+  }
+  //write to file from memory
+  if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
+    errnoExit("acl_set_file()");
+  acl_free(acl);
+  acl_free(new_acl);
+}
+
+
+/**
+* modifies an acl to contain entries in 'list'
+* file: file whose acl to modify
+* list: list of entries to add
+* num_entries: number of entries in `list`
+* exits on error
+**/
+void acl_mod(const char *file,ACLENTRY *list, int num_entries){
+
+  acl_t acl;
+
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
+    errnoExit("acl_get_file()");
+
+  int entry_id = ACL_FIRST_ENTRY;
+
+  ACLENTRY *user_obj  = NULL; //new user_obj
+  ACLENTRY *group_obj = NULL; //new group_obj
+  ACLENTRY *other     = NULL; //new other
+  ACLENTRY *mask      = NULL; //new mask
+  ACLENTRY *user[MAX_ACL_ENTRIES]; //new users
+  ACLENTRY *group[MAX_ACL_ENTRIES]; //new groups
+  int user_ind  = 0;
+  int group_ind = 0;
+
+  //store pointers to acl entries that are being added
+  //so we can see if current one needs to be modifed, instance access later
+  int cur_index = 0; //for all ACLENTRY's
+  for(;cur_index<num_entries;cur_index){
+    ACLENTRY *acl_entry = (entries+cur_index);
+
+    switch (acl_entry->tag) {
+      case ACL_USER_OBJ:
+        user_obj = acl_entry;
+        break;
+      case ACL_GROUP_OBJ:
+        group_obj = acl_entry;
+        break;
+      case ACL_GROUP:
+        group[group_ind++] = acl_entry;
+        break;
+      case ACL_USER:
+        user[user_ind++] = acl_entry;
+        break;
+      case ACL_OTHER:
+        other = acl_entry;
+        break;
+      case ACL_MASK:
+        mask = acl_entry;
+        break;
+      default:
+        errExit("%s %ld\n","Received unexpected tag:",(long)acl_entry->tag);
+        break;
+    }
+  }
+
+  acl_entry_t entry; //go through all current acl entries
+  for(;acl_get_entry(acl,entry_id,&entry)!=1;entry=ACL_NEXT_ENTRY){
+      acl_tag_t tag;
+      if(acl_get_tag_type(entry,&tag)!=0)
+        errnoExit("acl_get_tag_type()");
+
+      switch (tag) {
+        case ACL_USER_OBJ: //update the user obj
+          acl_update_perm(entry,user_obj);
+          break;
+        case ACL_GROUP_OBJ://update the group obj
+          acl_update_perm(entry,group_obj);
+          break;
+        case ACL_MASK: //update the mask
+          acl_update_perm(entry,mask);
+          break;
+        case ACL_OTHER: //update the other
+          acl_update_perm(entry,other);
+          break;
+        case ACL_USER: //update all users
+          uid_t uid;
+          if((uid=acl_get_qualifier(entry))==(uid_t)-1)
+            errnoExit("acl_get_qualifier()");
+          int index=0;
+          for(;index<user_ind;index++)
+            if(user[index]->ids.u_qual==uid){ //modify user entry if told to
+              acl_update_perm(entry,user[index]);
+              user[index].ids.marked = -1;
+              break;
+            }
+          }
+          break;
+        case ACL_GROUP: //update all groups
+          gid_t gid;
+          if((gid=acl_get_qualifier(entry))==(gid_t)-1)
+            errnoExit("acl_get_qualifier()");
+          int index=0;
+          for(;index<group_ind;index++)
+            if(group[index]->ids.g_qual==gid){ //modify group entry if told to
+              acl_update_perm(entry,group[index]);
+              group[index].ids.marked = -1;
+              break;
+            }
+          }
+          break;
+        default:
+          errExit("%s %ld\n","Received unexpected tag:",(long)tag);
+          break;
+      }
+
+      int index =0; //for entries not used (i.e. not currently in the acl) all them
+      for(;index<user_ind;index++)
+        if(user[index].ids.marked!=-1)
+            acl_create(&acl,user[index]);
+      index =0; //same as above but for groups
+      for(;index<group_ind;index++)
+        if(group[index].ids.marked!=-1)
+            acl_create(&acl,group[index]);
+
+  }
+
+  //write to file from memory
+  if(acl_set_file(file,ACL_TYPE_ACCESS,acl)!=ACL_OK)
+    errnoExit("acl_set_file()");
+  acl_free(acl);
+
+
+}
+
+
+_BOOL rem_acl();
+
 
 /**
 * parsing short-form acl string
@@ -266,57 +488,19 @@ main(int argc, char *argv[]){
     }
   }
 
-  acl_t acl;
 
-  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
-    errnoExit("acl_get_file()");
 
   //overwrite current ACL with new ACL
-  if(opt_mask.word&SET){
-    acl_t new_acl; //create new acl
-    if((new_acl=acl_init(num_entries))== (acl_t)NULL)
-      errnoExit("acl_init()");
+/*  if(opt_mask.word&SET){
 
-    int cur_index = 0; //for all ACLENTRY's
-    for(;cur_index<num_entries;cur_index){
-      ACLENTRY *acl_entry = (entries+cur_index);
-
-      acl_entry_t entry; //create the entry
-      if((acl_create_entry(&new_acl,&entry))!=ACL_OK)
-        errnoExit("acl_create_entry()");
-      //set the tag
-      if((acl_set_tag_type(entry,acl_entry->tag))!=ACL_OK)
-        errnoExit("acl_set_tag_type()");
-      //set the qualifier if necessary
-      if(acl_entry->tag == ACL_USER)
-        if(acl_set_qualifier(entry,acl_entry->ids.u_qual)!=ACL_OK)
-          errnoExit("acl_set_qualifier()");
-      else if(acl_entry->tag == ACL_GROUP)
-        if(acl_set_qualifier(entry,acl_entry->ids.g_qual)!=ACL__OK)
-          errnoExit("acl_set_qualifier()");
-      
-      acl_permset_t permset;
-      //set the permissions
-      if(acl_entry->perm.nibble&READ)
-        if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
-          errnoExit("acl_add_perm()");
-      if(acl_entry->perm.nibble&WRITE)
-        if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
-          errnoExit("acl_add_perm()");
-      if(acl_entry->perm.nibble&EXEC)
-        if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
-          errnoExit("acl_add_perm()");
-
-      if(acl_set_permset(entry,permset)!=ACL_OK)
-        errnoExit("acl_set_permset()");
-    }
-    //write to file from memory
-    if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
-      errnoExit("acl_set_file()");
   }
 
+  else if(opt_mask.word&MODIFY){
+
+  }*/
+
   free(entries);
-  acl_free(acl);
+
 
 
   exit(EXIT_SUCCESS);
