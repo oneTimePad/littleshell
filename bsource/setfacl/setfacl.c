@@ -45,18 +45,18 @@ static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
   if(acl_entry == NULL) return;
 
   acl_permset_t perm_set;
-  if(acl_get_permset(entry,&perm_set)!=0)
+  if(acl_get_permset(entry,&perm_set)!=ACL_OK)
     errnoExit("acl_get_perm()");
 
   PERM perm = acl_entry->perm;
-  if(((perm.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : 0)!=0)
+  if(((perm.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : ACL_OK)!=ACL_OK)
     errnoExit("acl_add_perm()");
-  if(((perm.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : 0)!=0)
+  if(((perm.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : ACL_OK)!=ACL_OK)
     errnoExit("acl_add_perm()");
-  if(((perm.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): 0)!=0)
+  if(((perm.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): ACL_OK)!=ACL_OK)
     errnoExit("acl_add_perm()");
 
-  if(acl_set_perm(entry,permset)!=0)
+  if(acl_set_permset(entry,perm_set)!=ACL_OK)
     errnoExit("acl_set_perm()");
 }
 
@@ -78,7 +78,7 @@ static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
     if(acl_set_qualifier(entry,&acl_entry->ids.u_qual)!=ACL_OK)
       errnoExit("acl_set_qualifier()");
   else if(acl_entry->tag == ACL_GROUP)
-    if(acl_set_qualifier(entry,&acl_entry->ids.g_qual)!=ACL__OK)
+    if(acl_set_qualifier(entry,&acl_entry->ids.g_qual)!=ACL_OK)
       errnoExit("acl_set_qualifier()");
 
   acl_permset_t permset;
@@ -116,7 +116,7 @@ void acl_set(const char *file,ACLENTRY *list, int num_entries){
 
   int cur_index = 0; //for all ACLENTRY's
   for(;cur_index<num_entries;cur_index){
-    ACLENTRY *acl_entry = (entries+cur_index);
+    ACLENTRY *acl_entry = (list+cur_index);
     acl_create(&new_acl,acl_entry);
   }
   //write to file from memory
@@ -141,7 +141,7 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
   if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
     errnoExit("acl_get_file()");
 
-  int entry_id = ACL_FIRST_ENTRY;
+
 
   ACLENTRY *user_obj  = NULL; //new user_obj
   ACLENTRY *group_obj = NULL; //new group_obj
@@ -156,7 +156,7 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
   //so we can see if current one needs to be modifed, instance access later
   int cur_index = 0; //for all ACLENTRY's
   for(;cur_index<num_entries;cur_index){
-    ACLENTRY *acl_entry = (entries+cur_index);
+    ACLENTRY *acl_entry = (list+cur_index);
 
     switch (acl_entry->tag) {
       case ACL_USER_OBJ:
@@ -182,11 +182,13 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
         break;
     }
   }
-
+  int entry_id = ACL_FIRST_ENTRY;
   acl_entry_t entry; //go through all current acl entries
-  for(;acl_get_entry(acl,entry_id,&entry)!=1;entry=ACL_NEXT_ENTRY){
+  uid_t *uid;
+  gid_t *gid;
+  for(;acl_get_entry(acl,entry_id,&entry)!=1;entry_id=ACL_NEXT_ENTRY){
       acl_tag_t tag;
-      if(acl_get_tag_type(entry,&tag)!=0)
+      if(acl_get_tag_type(entry,&tag)!=ACL_OK)
         errnoExit("acl_get_tag_type()");
 
       switch (tag) {
@@ -203,27 +205,26 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
           acl_update_perm(entry,other);
           break;
         case ACL_USER: //update all users
-          uid_t uid;
-          if((uid=acl_get_qualifier(entry))==(uid_t)-1)
+
+          if((uid=acl_get_qualifier(entry))==(void *)NULL)
             errnoExit("acl_get_qualifier()");
-          int index=0;
-          for(;index<user_ind;index++)
-            if(user[index]->ids.u_qual==uid){ //modify user entry if told to
-              acl_update_perm(entry,user[index]);
-              user[index].ids.marked = -1;
+          cur_index=0;
+          for(;cur_index<user_ind;cur_index++){
+            if(user[cur_index]->ids.u_qual==*uid){ //modify user entry if told to
+              acl_update_perm(entry,user[cur_index]);
+              user[cur_index]->ids.marked = -1;
               break;
             }
           }
           break;
         case ACL_GROUP: //update all groups
-          gid_t gid;
-          if((gid=acl_get_qualifier(entry))==(gid_t)-1)
+          if((gid=acl_get_qualifier(entry))==(void *)NULL)
             errnoExit("acl_get_qualifier()");
-          int index=0;
-          for(;index<group_ind;index++)
-            if(group[index]->ids.g_qual==gid){ //modify group entry if told to
-              acl_update_perm(entry,group[index]);
-              group[index].ids.marked = -1;
+          cur_index=0;
+          for(;cur_index<group_ind;cur_index++){
+            if(group[cur_index]->ids.g_qual==*gid){ //modify group entry if told to
+              acl_update_perm(entry,group[cur_index]);
+              group[cur_index]->ids.marked = -1;
               break;
             }
           }
@@ -232,17 +233,16 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
           errExit("%s %ld\n","Received unexpected tag:",(long)tag);
           break;
       }
+    }
 
-      int index =0; //for entries not used (i.e. not currently in the acl) all them
-      for(;index<user_ind;index++)
-        if(user[index].ids.marked!=-1)
-            acl_create(&acl,user[index]);
-      index =0; //same as above but for groups
-      for(;index<group_ind;index++)
-        if(group[index].ids.marked!=-1)
-            acl_create(&acl,group[index]);
-
-  }
+  cur_index =0; //for entries not used (i.e. not currently in the acl) all them
+  for(;cur_index<user_ind;cur_index++)
+    if(user[cur_index]->ids.marked!=-1)
+        acl_create(&acl,user[cur_index]);
+  cur_index =0; //same as above but for groups
+  for(;cur_index<group_ind;cur_index++)
+    if(group[cur_index]->ids.marked!=-1)
+        acl_create(&acl,group[cur_index]);
 
   //write to file from memory
   if(acl_set_file(file,ACL_TYPE_ACCESS,acl)!=ACL_OK)
@@ -253,7 +253,9 @@ void acl_mod(const char *file,ACLENTRY *list, int num_entries){
 }
 
 
-_BOOL rem_acl();
+void rem_acl(const char *file,ACLENTRY *list, int num_entries){
+  
+}
 
 
 /**
@@ -476,7 +478,7 @@ main(int argc, char *argv[]){
   char* file_name = argv[(optind>0)? optind : optind+1];
   if(file_name==NULL)
     usageExit("%s [OPTIONS] filename\n",argv[0]);
-
+  /*
   ACLENTRY* entries = (ACLENTRY*)malloc(sizeof(ACLENTRY*)*10);
   int num_entries
   if(opt_mask.word&SET||opt_mask.word&MODIFY||opt_mask.word&REMOVE){
@@ -486,7 +488,7 @@ main(int argc, char *argv[]){
 
       errnoExit("short_parse_acl()");
     }
-  }
+  }*/
 
 
 
@@ -499,7 +501,7 @@ main(int argc, char *argv[]){
 
   }*/
 
-  free(entries);
+  //free(entries);
 
 
 

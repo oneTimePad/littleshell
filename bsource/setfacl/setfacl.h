@@ -85,7 +85,7 @@ typedef struct _ACLENTRY{
 } ACLENTRY;
 
 _BOOL setpermzero(PERM*);
-_BOOL short_parse_acl(const char *,size_t,ACLENTRY *, int,int);
+_BOOL short_parse_acl(const char *,size_t,ACLENTRY *, int,int *);
 
 
 #endif
