@@ -25,7 +25,7 @@
 
 
 
-#define ACL_OK 0
+
 #define NO_MORE_ENTRIES 1
 
 

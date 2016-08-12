@@ -12,68 +12,7 @@
 #include "setfacl.h"
 
 
-/**
-* update a perm_set_t in entry to the one in aclentry
-* entry: acl entry to change from in-memory
-* acl_entry: where to retrieve new perms from
-* exits on error
-**/
-/*static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
 
-  if(acl_entry == NULL) return;
-
-  acl_permset_t perm_set;
-  if(acl_get_permset(entry,&perm_set)!=ACL_OK)
-    errnoExit("acl_get_perm()");
-
-  PERM perm = acl_entry->perm;
-  if(((perm.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : ACL_OK)!=ACL_OK)
-    errnoExit("acl_add_perm()");
-  if(((perm.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : ACL_OK)!=ACL_OK)
-    errnoExit("acl_add_perm()");
-  if(((perm.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): ACL_OK)!=ACL_OK)
-    errnoExit("acl_add_perm()");
-
-  if(acl_set_permset(entry,perm_set)!=ACL_OK)
-    errnoExit("acl_set_perm()");
-}*/
-
-/**
-* creates a new acl_entry_t given acl and acl_entry
-* acl: ptr to acl to add to
-* acl_entry: where to get tag,qualifier, and perms
-* exits on error
-**/
-/*static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
-  acl_entry_t entry; //create the entry
-  if((acl_create_entry(acl,&entry))!=ACL_OK)
-    errnoExit("acl_create_entry()");
-  //set the tag
-  if((acl_set_tag_type(entry,acl_entry->tag))!=ACL_OK)
-    errnoExit("acl_set_tag_type()");
-  //set the qualifier if necessary
-  if(acl_entry->tag == ACL_USER)
-    if(acl_set_qualifier(entry,&acl_entry->ids.u_qual)!=ACL_OK)
-      errnoExit("acl_set_qualifier()");
-  else if(acl_entry->tag == ACL_GROUP)
-    if(acl_set_qualifier(entry,&acl_entry->ids.g_qual)!=ACL_OK)
-      errnoExit("acl_set_qualifier()");
-
-  acl_permset_t permset;
-  //set the permissions
-  if(acl_entry->perm.nibble&READ)
-    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
-      errnoExit("acl_add_perm()");
-  if(acl_entry->perm.nibble&WRITE)
-    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
-      errnoExit("acl_add_perm()");
-  if(acl_entry->perm.nibble&EXEC)
-    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
-      errnoExit("acl_add_perm()");
-
-  if(acl_set_permset(entry,permset)!=ACL_OK)
-    errnoExit("acl_set_permset()");
-}*/
 
 
 
@@ -82,11 +21,10 @@
 /**
 *sets an a new acl
 *file: file whose acl to change
-*list: list of entries to make new acl
-*num_entries: number of entries
+*acl_part: ptr to acl_entry_part
 * exits on error
 **/
-/*void acl_set(const char *file,ACLENTRY *list, int num_entries){
+void acl_set(const char *file,acl_entry_part *acl_part){
   acl_t acl;
 
   if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
@@ -106,7 +44,7 @@
     errnoExit("acl_set_file()");
   acl_free(acl);
   acl_free(new_acl);
-}*/
+}
 
 
 /**

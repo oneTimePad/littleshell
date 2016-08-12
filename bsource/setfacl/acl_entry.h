@@ -5,6 +5,7 @@
 #include "../../bool.h"
 #include <pwd.h>
 #include <grp.h>
+#include <sys/acl.h>
 
 
 #define MAX_ACL_ENTRIES 10
@@ -20,9 +21,11 @@
 #define WRITE 2
 #define EXEC  4
 
+#define ACL_OK 0
+
 //holds information about entries in short form input
 typedef struct _acl_entry_in{
-  //acl_tag_t tag; //holds the entry's tag
+  acl_tag_t tag; //holds the entry's tag
 
   //contain id_t qualifier
   union{
@@ -63,6 +66,6 @@ typedef struct _acl_entry_partition{
 
 void acl_part_init(acl_entry_part *);
 _BOOL acl_short_parse(const char *,size_t, acl_entry_part *);
-
+_BOOL acl_create(acl_t *,acl_entry_in *);
 
 #endif
