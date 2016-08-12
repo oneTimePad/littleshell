@@ -62,12 +62,22 @@ static _BOOL set_permset(char **perm_string,acl_entry_in *entry){
 
 }
 
+/**
+* sets up acl_entry_in with default values
+* entry: ptr to acl_entry_in to initialize
+* always succeeds
+**/
 static inline void acl_entry_init(acl_entry_in *entry){
     entry->tag = (long)-1;
     entry->qualifier.zero = (long)-1;
     entry->permset.nibble = 0;
 }
 
+/**
+* set ups acl_part with default values
+* acl_part: ptr to acl_part to initialize
+* aclways succeeds
+**/
 void acl_part_init(acl_entry_part *acl_part){
     acl_entry_init(&acl_part->user_obj);
     acl_entry_init(&acl_part->group_obj);
@@ -198,12 +208,12 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
 * acl_entry: where to retrieve new perms from
 * returns status
 **/
-static _BOOL acl_update_perm(acl_entry_t entry,acl_entry_in *entry_in){
+static _BOOL acl_update_perm(acl_entry_t *entry,acl_entry_in *entry_in){
 
   if(entry_in == NULL) return;
 
   acl_permset_t perm_set;
-  if(acl_get_permset(entry,&perm_set)!=ACL_OK)
+  if(acl_get_permset(*entry,&perm_set)!=ACL_OK)
     return FALSE;
 
 
@@ -216,6 +226,58 @@ static _BOOL acl_update_perm(acl_entry_t entry,acl_entry_in *entry_in){
 
   if(acl_set_permset(entry,perm_set)!=ACL_OK)
     return FALSE;
+}
+
+static _BOOL acl_update_permset(acl_entry_t *entry,acl_entry_in *entry_in){
+  acl_permset_t permset;
+  //set the permissions
+  if(entry_in->permset.nibble&READ)
+    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
+      return FALSE;
+  if(entry_in->permset.nibble&WRITE)
+    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
+      return FALSE;
+  if(entry_in->permset.nibble&EXEC)
+    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
+      return FALSE;
+
+  if(acl_set_permset(entry,permset)!=ACL_OK)
+    return FALSE;
+  return TRUE;
+}
+
+/**
+* looks for a user entry with uid if uid is not NULL or group entry is gid is not NULL
+* uid: ptr to uid qualifier
+* gid: ptr to gid qualidier
+* acl_part: ptr to partition of acl_entry_in's
+* acl_entry_in: double pointer that outputs found entry
+* returns: status sets errno on error
+**/
+_BOOL acl_find_entry_with_qual(uid_t *uid,gid_t *gid,acl_entry_part *acl_part,acl_entry_in **entry_in){
+  if((uid==NULL &&gid ==NULL)acl_part==NULL || entry_in == NULL){errno = EINVAL; return FALSE;}
+  _BOOL use_uid = (uid==NULL) ? FALSE : TRUE;
+
+
+  int entry_ind =0;
+  entry_in *found = NULL;
+  int num_entries = (use_uid) ? acl_part->num_users : acl_part->num_groups;
+  for(;entry_ind<num_entries;entry_ind++){
+    long qual = (use_uid) ? acl_part->user[entry_ind].qualidier.u_qual : acl_part->group[entry_ind].qualifier.g_qual;
+    if(qual == (long)((use_uid) ? *uid: *gid)){
+      found = (use_uid) ? &acl_part->user[entry_ind] : &acl_part->group[entry_ind];
+      break;
+    }
+  }
+
+  if(found == NULL){
+    errno = ENOENT;
+    return FALSE;
+  }
+
+  *entry_in = found;
+  return TRUE;
+
 }
 
 /**
@@ -239,18 +301,51 @@ _BOOL acl_create(acl_t *acl,acl_entry_in *entry_in){
     if(acl_set_qualifier(entry,&entry_in->qualifier.g_qual)!=ACL_OK)
       return FALSE;
 
-  acl_permset_t permset;
-  //set the permissions
-  if(entry_in->permset.nibble&READ)
-    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&WRITE)
-    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&EXEC)
-    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
+  if(!acl_update_permset(&entry,entry_in))
+    return FALSE;
+  return TRUE;
+}
+
+/**
+* modifies `entry` to contain characteristics of `entry_in`
+*entry: ptr to entry to modify(only used if !add is true)
+*entry_in: ptr to entry who characterisitcs to use to modify entry
+*add: should this be a new entry
+* acl: acl to add new entry to
+*returns: status
+* if add is FALSE, acl is not checked
+**/
+_BOOL acl_modify(acl_entry_t *entry,acl_entry_in *entry_in,_BOOL add,acl_t *acl){
+  if(entry_in == NULL){errno = EINVAL; return FALSE;}
+  if(!add&&entry==NULL){errno = EINVAL;return FALSE;}
+  if(add&&acl==NULL){errno = EINVAL; return FALSE;}
+  if(!add){
+    //just do some checks to verify input
+
+
+     acl_tag_t tag;
+     if(acl_get_tag_type(*entry,&tag)!=ACL_OK)
       return FALSE;
 
-  if(acl_set_permset(entry,permset)!=ACL_OK)
-    return FALSE;
+     if(tag!=entry_in->tag){errno = EINVAL; return FALSE;}
+
+     long *qual;
+     if((qual=acl_get_qualifier(*entry))!=NULL){
+       if(*qual!=entry_in->qualifier.zero)
+        return FALSE
+     }
+     else if(!ISVALIDQUAL(entry_in->qualifier.zero))
+      return FALSE;
+    //end checks
+
+    if(!acl_update_permset(&entry,entry_in))
+      return FALSE;
+  }
+  else if(add){
+    if(!acl_create(acl,entry_in))
+      return FALSE;
+  }
+
+  return TRUE;
+
 }
