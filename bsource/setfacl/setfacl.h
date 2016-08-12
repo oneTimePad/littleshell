@@ -23,14 +23,11 @@
 #define EOFF        256384
 #define STIN        512768
 
-#define MAX_ACL_ENTRIES 10
+
 
 #define ACL_OK 0
 #define NO_MORE_ENTRIES 1
 
-#define READ  1
-#define WRITE 2
-#define EXEC  4
 
 //getopt_long options
 typedef union _SETFACL_OPTIONS {
@@ -62,31 +59,7 @@ typedef union _SETFACL_OPTIONS {
 
 } SFA_OPTIONS;
 
-//acl entry permission mask
-typedef union ACL_PERM_MASK{
-  struct{
-    char r:1;
-    char w:1;
-    char x:1;
-    char none:1;
-  } bits;
-  unsigned char nibble:4;
-} PERM;
 
-//acl entry
-typedef struct _ACLENTRY{
-  acl_tag_t tag;
-  union{
-    uid_t u_qual;
-    gid_t g_qual;
-    long  marked; //useful in some functions
-  }ids;
-  PERM  perm;
-
-} ACLENTRY;
-
-_BOOL setpermzero(PERM*);
-_BOOL short_parse_acl(const char *,size_t,ACLENTRY *, int,int *);
 
 
 #endif
