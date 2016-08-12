@@ -40,12 +40,18 @@ static inline gid_t getgidfromname(const char *gr_name){
 * returns: status
 **/
 static _BOOL set_permset(char **perm_string,acl_entry_in *entry){
-  if(perm_string==NULL || *perm_string == NULL || **perm_string=='\0'){
+  if(perm_string==NULL || *perm_string == NULL){
     errno = EINVAL;
     return FALSE;
   }
 
+  if(**perm_string=='\0'){
+    entry->no_perm = TRUE;
+    return TRUE;
+  }
 
+
+  entry->no_perm = FALSE;
   entry->permset.bits.r = (*(*perm_string)++=='r') ? 1 : 0;
   if(*perm_string=='\0'){ //make sure the string didn't end for some reason
     errno = EINVAL;
@@ -229,6 +235,10 @@ static _BOOL acl_update_perm(acl_entry_t *entry,acl_entry_in *entry_in){
 }
 
 static _BOOL acl_update_permset(acl_entry_t *entry,acl_entry_in *entry_in){
+  if(entry_in->no_perm){
+    errno = EINVAL;
+    return FALSE;
+  }
   acl_permset_t permset;
   //set the permissions
   if(entry_in->permset.nibble&READ)
@@ -345,6 +355,22 @@ _BOOL acl_modify(acl_entry_t *entry,acl_entry_in *entry_in,_BOOL add,acl_t *acl)
     if(!acl_create(acl,entry_in))
       return FALSE;
   }
+
+  return TRUE;
+
+}
+
+/**
+* removes entry in ptr from acl
+* acl: ptr to acl to modify
+* entry: ptr to entry to remove
+* returns: status
+**/
+_BOOL acl_remove(acl_t * acl, acl_entry_t *entry){
+  if(acl==NULL || entry==NULL){errno = EINVAL; return FALSE;}
+
+  if(acl_delete_entry(entry)!=ACL_OK)
+    return FALSE;
 
   return TRUE;
 

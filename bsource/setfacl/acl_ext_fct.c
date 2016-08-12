@@ -73,7 +73,7 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
   acl_t acl;
 
   if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
-    errnoExit("acl_get_file()");
+    return FALSE;
 
   int entry_ind = ACL_FIRST_ENTRY;
   acl_entry_t entry;
@@ -156,4 +156,67 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
   if(acl_free(&acl)!=ACL_OK)
     return FALSE;
 
+}
+
+
+_BOOL acl_rem(const char* file,acl_entry_part *acl_part){
+  acl_t acl;
+
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
+    return FALSE;
+
+  int entry_ind = ACL_FIRST_ENTRY;
+  acl_entry_t entry;
+  //loop through current entries
+  for(;acl_get_entry(acl,entry_ind,&entry)!=NO_MORE_ENTRIES;entry_ind = ACL_NEXT_ENTRY){
+    acl_tag_t tag;
+    if(acl_get_tag_type(entry&tag)!=ACL_OK)
+      return FALSE;
+
+    switch (tag) {
+      case ACL_USER_OBJ: //removes the user_obj if told to
+        if(acl_part->user_obj.qualifier.u_qual != USER_OBJ_QUAL)
+          break;
+          //add posix check
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+        break;
+      case ACL_GROUP_OBJ: //removes the group_obj if told to
+        if(acl_part->group_obj.qualifier.g_qual != GROUP_OBJ_QUAL)
+          break;
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+        break;
+      case ACL_OTHER: //removes other if told to
+        if(acl_part->other.qualifier.o_qual != OTHER_QUAL)
+          break;
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+        break;
+      case ACL_MASK: //removes mask if told to
+        if(acl_part->mask.qualifier.m_qual != MASK_QUAL)
+          break;
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+          break;
+      case ACL_USER: //removes user if told to
+        if((acl_get_qualifier(entry))!=NULL)
+          break;
+        errno = 0;
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+        break;
+      case ACL_GROUP: //removes group if told to
+        if((acl_get_qualifier(entry))!=NULL)
+          break;
+        errno = 0;
+        if(!acl_remove(&acl,&entry))
+          return FALSE;
+        break
+      default:
+        errno = EINVAL;
+        return FALSE;
+    }
+
+  }
 }

@@ -22,6 +22,7 @@
 #define EXEC  4
 
 #define ACL_OK 0
+#define NO_PERM -6666
 
 //holds information about entries in short form input
 typedef struct _acl_entry_in{
@@ -47,6 +48,8 @@ typedef struct _acl_entry_in{
     unsigned char nibble:4;
   } permset;
 
+  _BOOL no_perm
+
 } acl_entry_in;
 
 //partition entry by acl_tag_t(ACL_*) types
@@ -68,5 +71,6 @@ void acl_part_init(acl_entry_part *);
 _BOOL acl_short_parse(const char *,size_t, acl_entry_part *);
 _BOOL acl_create(acl_t *,acl_entry_in *);
 _BOOL acl_modify(acl_entry_t *,acl_entry_in *, _BOOL, acl_t *);
-_BOOL acl_find_entry_with_qual(uid_t *,gid_t *,acl_entry_part *,acl_entry_in **)
+_BOOL acl_find_entry_with_qual(uid_t *,gid_t *,acl_entry_part *,acl_entry_in **);
+_BOOL acl_remove(acl_t *, acl_entry_t *);
 #endif
