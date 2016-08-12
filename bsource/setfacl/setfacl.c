@@ -9,6 +9,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include "acl_entry.h"
+#include "acl_ext_fct.h"
 #include "setfacl.h"
 
 
@@ -17,34 +18,6 @@
 
 
 
-
-/**
-*sets an a new acl
-*file: file whose acl to change
-*acl_part: ptr to acl_entry_part
-* exits on error
-**/
-void acl_set(const char *file,acl_entry_part *acl_part){
-  acl_t acl;
-
-  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
-    errnoExit("acl_get_file()");
-
-  acl_t new_acl; //create new acl
-  if((new_acl=acl_init(num_entries))== (acl_t)NULL)
-    errnoExit("acl_init()");
-
-  int cur_index = 0; //for all ACLENTRY's
-  for(;cur_index<num_entries;cur_index){
-    ACLENTRY *acl_entry = (list+cur_index);
-    acl_create(&new_acl,acl_entry);
-  }
-  //write to file from memory
-  if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
-    errnoExit("acl_set_file()");
-  acl_free(acl);
-  acl_free(new_acl);
-}
 
 
 /**

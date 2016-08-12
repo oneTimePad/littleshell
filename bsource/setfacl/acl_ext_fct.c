@@ -11,67 +11,91 @@
 
 
 
-
-
 /**
-* update a perm_set_t in entry to the one in aclentry
-* entry: acl entry to change from in-memory
-* acl_entry: where to retrieve new perms from
-* returns status
+*sets a new acl
+*file: file whose acl to change
+*acl_part: ptr to acl_entry_part
+*returns: status
 **/
-static _BOOL acl_update_perm(acl_entry_t entry,acl_entry_in *entry_in){
+_BOOL acl_set(const char *file,acl_entry_part *acl_part){
+  acl_t acl;
 
-  if(entry_in == NULL) return;
-
-  acl_permset_t perm_set;
-  if(acl_get_permset(entry,&perm_set)!=ACL_OK)
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
     return FALSE;
 
+  acl_t new_acl; //create new acl
+  if((new_acl=acl_init(INIT_ENTRIES))== (acl_t)NULL)
+    return FALSE
 
-  if(((entry_in.permset.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : ACL_OK)!=ACL_OK)
-    return FALSE:
-  if(((entry_in.permset.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : ACL_OK)!=ACL_OK)
-    return FALSE:
-  if(((entry_in.permset.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): ACL_OK)!=ACL_OK)
+  if(acl_part->user_obj.qualifier.u_qual == USER_OBJ_QUAL) //check if there is user_obj entry to set
+    if(!acl_create(&new_acl,&acl_part->user_obj))
+      return FALSE;
+  if(acl_part->group_obj.qualifier.g_qual == GROUP_OBJ_QUAL) //check if there is a group_obj entry to set
+    if(!acl_create(&new_acl,&acl_part->group_obj))
+      return FALSE;
+  if(acl_part->other.qualifier.o_qual == OTHER_QUAL) //check if there is an other entry to set
+    if(!acl_create(&new_acl,&acl_part->other))
+      return FALSE;
+  if(acl_part->mask.qualifier.m_qual == MASK_QUAL) //check if there is a mask entry to set
+    if(!acl_create(&new_acl,&acl_part->mask))
+      return FALSE;
+
+  int entry_ind =0;
+  int num_users = acl_part->num_users;
+  for(;entry_ind<num_users;entry_ind++) //set user entries if any
+    if(!acl_create(&new_acl,&acl_part->user[entry_ind]))
+      return FALSE;
+  entry_ind = 0;
+  int num_groups = acl_partition->num_groups;
+  for(;entry_id<num_groups;entry_id++) //set group entries if any
+    if(!acl_create(&new_acl,&acl_part->group[entry_ind]))
+      return FALSE;
+
+  //write to file from memory
+  if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
     return FALSE;
 
-  if(acl_set_permset(entry,perm_set)!=ACL_OK)
+  if(acl_free(&acl)!=ACL_OK)
     return FALSE;
+  if(acl_free(&new_acl)!=ACL_OK)
+    return FALSE;
+
+  return TRUE;
 }
 
-/**
-* creates a new acl_entry_t given acl and acl_entry
-* acl: ptr to acl to add to
-* acl_entry: where to get tag,qualifier, and perms
-* returns status
-**/
-_BOOL acl_create(acl_t *acl,acl_entry_in *entry_in){
-  acl_entry_t entry; //create the entry
-  if((acl_create_entry(acl,&entry))!=ACL_OK)
-    return FALSE;
-  //set the tag
-  if((acl_set_tag_type(entry,entry_in->tag))!=ACL_OK)
-    return FALSE;
-  //set the qualifier if necessary
-  if(entry_in->tag == ACL_USER)
-    if(acl_set_qualifier(entry,&entry_in->qualifier.u_qual)!=ACL_OK)
-      return FALSE;
-  else if(entry_in->tag == ACL_GROUP)
-    if(acl_set_qualifier(entry,&entry_in->qualifier.g_qual)!=ACL_OK)
+
+_BOOL acl_mod(const char *file, acl_entry_part *acl_part){
+  acl_t acl;
+
+  if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
+    errnoExit("acl_get_file()");
+
+  int entry_ind = ACL_FIRST_ENTRY;
+  acl_entry_t entry;
+  for(;acl_get_entry(acl,entry_ind,&entry)!=NO_MORE_ENTRIES;entry_ind = ACL_NEXT_ENTRY){
+    acl_tag_t tag;
+    if(acl_get_tag_type(entry&tag)!=ACL_OK)
       return FALSE;
 
-  acl_permset_t permset;
-  //set the permissions
-  if(entry_in->permset.nibble&READ)
-    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&WRITE)
-    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&EXEC)
-    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
-      return FALSE:
+    switch (tag) {
+      case ACL_USER_OBJ:
+        break;
+      case ACL_GROUP_OBJ:
+        break;
+      case ACL_OTHER:
+        break;
+      case ACL_MASK:
+        break;
+      case ACL_USER:
+        break;
+      case ACL_GROUP:
+        break
+      default:
+        errno = EINVAL;
+        return FALSE;
+    }
 
-  if(acl_set_permset(entry,permset)!=ACL_OK)
-    return FALSE:
+
+  }
+
 }
