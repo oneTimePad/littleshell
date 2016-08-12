@@ -40,22 +40,25 @@ static inline gid_t getgidfromname(const char *gr_name){
 * sets errno to EINVAL on error
 * returns: status
 **/
-static _BOOL set_permset(char *perm_string,acl_entry_in *entry){
-  if(perm_string == NULL || *perm_string=='\0'){
+static _BOOL set_permset(char **perm_string,acl_entry_in *entry){
+  if(perm_string==NULL || *perm_string == NULL || **perm_string=='\0'){
     errno = EINVAL;
     return FALSE;
   }
-  entry->permset.bits.r = (*perm_string++=='r') ? 1 : 0;
+
+
+  entry->permset.bits.r = (*(*perm_string)++=='r') ? 1 : 0;
   if(*perm_string=='\0'){ //make sure the string didn't end for some reason
     errno = EINVAL;
     return FALSE;
   }
-  entry->permset.bits.w = (*perm_string++=='w')? 1 : 0;
+  entry->permset.bits.w = (*(*perm_string)++=='w')? 1 : 0;
   if(*perm_string=='\0'){
     errno = EINVAL;
     return FALSE;
   }
-  entry->permset.bits.x = (*perm_string=='x') ? 1 : 0;
+  entry->permset.bits.x = (*(*perm_string)=='x') ? 1 : 0;
+
   return TRUE;
 
 }
@@ -89,7 +92,7 @@ void acl_part_init(acl_entry_part *acl_part){
 *   errno is also set by getuidfromname and getgidfromname
 * returns: status and sets errno
 **/
-_BOOL short_parse_acl(const char* acl_string,size_t string_size, acl_entry_part *acl_part){
+_BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part *acl_part){
   if( string_size<=0 ||acl_string==NULL || *acl_string == '\0' ) return FALSE;
   if(strlen(acl_string)!=string_size) return FALSE;
   //copy over the string
@@ -120,17 +123,18 @@ _BOOL short_parse_acl(const char* acl_string,size_t string_size, acl_entry_part 
             //convert the qualifier name to uid (reason we added '\0')
             if((user_entry->qualifier.u_qual=getuidfromname(acl_string_cpy))==-1){
             if(errno ==0)
-            errno = ENOENT;
-            return FALSE;
+              errno = ENOENT;
+              return FALSE;
             }
             *qual_str=':';
             acl_string_cpy = qual_str+1;
           }
           else{
+            acl_string_cpy++;
             user_entry = &acl_part->user_obj;
             user_entry->qualifier.u_qual = USER_OBJ_QUAL;
           }
-          if(!set_permset(acl_string_cpy,user_entry)) return FALSE;
+          if(!set_permset(&acl_string_cpy,user_entry)) return FALSE;
           break;
         case 'g': //same reason for 'u'
           if(*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
@@ -153,20 +157,21 @@ _BOOL short_parse_acl(const char* acl_string,size_t string_size, acl_entry_part 
             acl_string_cpy = qual_str+1;
           }
           else{
+            acl_string_cpy++;
             group_entry = &acl_part->group_obj;
             group_entry->qualifier.g_qual = GROUP_OBJ_QUAL;
           }
-          if(!set_permset(acl_string_cpy,group_entry)) return FALSE;
+          if(!set_permset(&acl_string_cpy,group_entry)) return FALSE;
             break;
         case 'o': // other
-          if(*acl_string_cpy++!=':'||*acl_string_cpy!=':') {errno = EINVAL; return FALSE;}
+          if(*acl_string_cpy++!=':'||*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
           acl_part->other.qualifier.o_qual = OTHER_QUAL;
-          if(!set_permset(++acl_string_cpy,&acl_part->other)) return FALSE;
+          if(!set_permset(&acl_string_cpy,&acl_part->other)) return FALSE;
           break;
         case 'm': //mask
-          if(*acl_string_cpy++!=':'||*acl_string_cpy!=':') {errno = EINVAL; return FALSE;}
+          if(*acl_string_cpy++!=':'||*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
           acl_part->mask.qualifier.m_qual = MASK_QUAL;
-          if(!set_permset(++acl_string_cpy,&acl_part->mask)) return FALSE;
+          if(!set_permset(&acl_string_cpy,&acl_part->mask)) return FALSE;
           break;
         default: // it is something unknown
           errno = EINVAL;

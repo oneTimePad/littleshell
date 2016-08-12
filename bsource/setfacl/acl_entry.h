@@ -62,7 +62,7 @@ typedef struct _acl_entry_partition{
 
 
 void acl_part_init(acl_entry_part *);
-_BOOL short_parse_acl(const char *,size_t, acl_entry_part *);
+_BOOL acl_short_parse(const char *,size_t, acl_entry_part *);
 
 
 #endif

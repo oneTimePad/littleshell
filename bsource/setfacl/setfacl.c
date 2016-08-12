@@ -8,6 +8,7 @@
 #include <sys/acl.h>
 #include <pwd.h>
 #include <grp.h>
+#include "acl_entry.h"
 #include "setfacl.h"
 
 
@@ -17,7 +18,7 @@
 * acl_entry: where to retrieve new perms from
 * exits on error
 **/
-static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
+/*static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
 
   if(acl_entry == NULL) return;
 
@@ -35,7 +36,7 @@ static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
 
   if(acl_set_permset(entry,perm_set)!=ACL_OK)
     errnoExit("acl_set_perm()");
-}
+}*/
 
 /**
 * creates a new acl_entry_t given acl and acl_entry
@@ -43,7 +44,7 @@ static void acl_update_perm(acl_entry_t entry,ACLENTRY *acl_entry){
 * acl_entry: where to get tag,qualifier, and perms
 * exits on error
 **/
-static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
+/*static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
   acl_entry_t entry; //create the entry
   if((acl_create_entry(acl,&entry))!=ACL_OK)
     errnoExit("acl_create_entry()");
@@ -72,7 +73,7 @@ static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
 
   if(acl_set_permset(entry,permset)!=ACL_OK)
     errnoExit("acl_set_permset()");
-}
+}*/
 
 
 
@@ -85,7 +86,7 @@ static void acl_create(acl_t *acl,ACLENTRY *acl_entry){
 *num_entries: number of entries
 * exits on error
 **/
-void acl_set(const char *file,ACLENTRY *list, int num_entries){
+/*void acl_set(const char *file,ACLENTRY *list, int num_entries){
   acl_t acl;
 
   if((acl=acl_get_file(file,ACL_TYPE_ACCESS))==(acl_t)NULL)
@@ -105,7 +106,7 @@ void acl_set(const char *file,ACLENTRY *list, int num_entries){
     errnoExit("acl_set_file()");
   acl_free(acl);
   acl_free(new_acl);
-}
+}*/
 
 
 /**
@@ -115,7 +116,7 @@ void acl_set(const char *file,ACLENTRY *list, int num_entries){
 * num_entries: number of entries in `list`
 * exits on error
 **/
-void acl_mod(const char *file,ACLENTRY *list, int num_entries){
+/*void acl_mod(const char *file,ACLENTRY *list, int num_entries){
 
   acl_t acl;
 
@@ -236,7 +237,7 @@ void rem_acl(const char *file,ACLENTRY *list, int num_entries){
 
 
     }
-}
+}*/
 
 
 
@@ -322,6 +323,13 @@ main(int argc, char *argv[]){
   char* file_name = argv[(optind>0)? optind : optind+1];
   if(file_name==NULL)
     usageExit("%s [OPTIONS] filename\n",argv[0]);
+
+  acl_entry_part part;
+  acl_part_init(&part);
+
+  if(!acl_short_parse(acl_in,strlen(acl_in),&part))
+    errnoExit("short_parse_acl()");
+
   /*
   ACLENTRY* entries = (ACLENTRY*)malloc(sizeof(ACLENTRY*)*10);
   int num_entries
