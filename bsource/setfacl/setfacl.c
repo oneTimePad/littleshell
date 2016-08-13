@@ -21,7 +21,7 @@ static struct option long_options[] = {
   {"modify"  , required_argument,    0 , 'm'},
   {"remove" , required_argument,    0 , 'x'},
   {"set-file"   , required_argument,    0 , 'S'},
-  {"modify-file"   , required_argument,    0 , 'M'},
+  {"Lodify-file"   , required_argument,    0 , 'M'},
   {"remove-file"   , required_argument,    0 , 'X'},
   {"remove-all"   , no_argument,          0 , 'b'},
   {"remove-default", no_argument,          0 , 'k'},
@@ -47,6 +47,7 @@ main(int argc, char *argv[]){
   while((opt = getopt_long(argc,argv,"s:m:x:S:M:X:bkndRLPvh",long_options,&long_index))!=-1){
     switch (opt) {
       case 's':
+        printf("here");
         acl_in = optarg;
         opt_mask.bits.s = 1;
         break;
@@ -106,21 +107,36 @@ main(int argc, char *argv[]){
     errnoExit("short_parse_acl()");
 
   //overwrite current ACL with new ACL
-  if(opt_mask.word&SET){
-    if(!acl_set(file_name,&acl_part))
+  /*if(opt_mask.word&SET){
+    if(!acl_set(file_name,&acl_part)){
+      if(errno == -1){
+        errno =0;
+        errExit("%s\n","the ACL that is replacing the current ACL is invalid!");
+      }
       errnoExit("acl_set()");
-  }
+    }
+  }*/
   //modify current ACL with new ACL
-  else if(opt_mask.word&MODIFY){
-    if(!acl_mod(file_name,&acl_part))
+/*  else if(opt_mask.word&MODIFY){*/
+    if(!acl_mod(file_name,&acl_part)){
+      if(errno == -1){
+        errno =0;
+        errExit("%s\n","the ACL that is replacing the current ACL is invalid!");
+      }
       errnoExit("acl_mod()");
+    }
 
-  }
+  //}
   //remove entries from curent with that are in input ACL
-  else if(opt_mask.word&REMOVE){
-    if(!acl_rem(file_name,&acl_part))
+  /*else if(opt_mask.word&REMOVE){
+    if(!acl_rem(file_name,&acl_part)){
+      if(errno == -1){
+        errno =0;
+        errExit("%s\n","the ACL that is replacing the current ACL is invalid!");
+      }
       errnoExit("acl_rem()");
-  }
+    }
+  }*/
 
 
 

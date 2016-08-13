@@ -149,7 +149,7 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
           else{
             acl_string_cpy++;
             user_entry = &acl_part->user_obj;
-            user_entry->qualifier.u_qual = USER_OBJ_QUAL;
+            user_entry->qualifier.u_obj_qual = USER_OBJ_QUAL;
             user_entry->tag = ACL_USER_OBJ;
 
           }
@@ -179,7 +179,7 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
           else{
             acl_string_cpy++;
             group_entry = &acl_part->group_obj;
-            group_entry->qualifier.g_qual = GROUP_OBJ_QUAL;
+            group_entry->qualifier.g_obj_qual = GROUP_OBJ_QUAL;
             group_entry->tag = ACL_GROUP_OBJ;
           }
           if(!set_permset(&acl_string_cpy,group_entry)) return FALSE;
@@ -223,15 +223,16 @@ static _BOOL acl_update_perm(acl_entry_t *entry,acl_entry_in *entry_in){
     return FALSE;
 
 
-  if(((entry_in->permset.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : ACL_OK)!=ACL_OK)
+  if(((entry_in->permset.nibble&READ) ? acl_add_perm(perm_set,ACL_READ)   : acl_delete_perm(perm_set,ACL_READ))!=ACL_OK)
     return FALSE;
-  if(((entry_in->permset.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : ACL_OK)!=ACL_OK)
+  if(((entry_in->permset.nibble&WRITE)? acl_add_perm(perm_set,ACL_WRITE)  : acl_delete_perm(perm_set,ACL_WRITE))!=ACL_OK)
     return FALSE;
-  if(((entry_in->permset.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): ACL_OK)!=ACL_OK)
+  if(((entry_in->permset.nibble&EXEC) ? acl_add_perm(perm_set,ACL_EXECUTE): acl_delete_perm(perm_set,ACL_EXECUTE))!=ACL_OK)
     return FALSE;
 
   if(acl_set_permset(*entry,perm_set)!=ACL_OK)
     return FALSE;
+  return TRUE;
 }
 
 static _BOOL acl_update_permset(acl_entry_t *entry,acl_entry_in *entry_in){
@@ -239,20 +240,13 @@ static _BOOL acl_update_permset(acl_entry_t *entry,acl_entry_in *entry_in){
     errno = EINVAL;
     return FALSE;
   }
-  acl_permset_t permset;
-  //set the permissions
-  if(entry_in->permset.nibble&READ)
-    if(acl_add_perm(permset,ACL_READ)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&WRITE)
-    if(acl_add_perm(permset,ACL_WRITE)!=ACL_OK)
-      return FALSE;
-  if(entry_in->permset.nibble&EXEC)
-    if(acl_add_perm(permset,ACL_EXECUTE)!=ACL_OK)
-      return FALSE;
 
-  if(acl_set_permset(*entry,permset)!=ACL_OK)
+  if(!acl_update_perm(entry,entry_in))
     return FALSE;
+
+
+
+
   return TRUE;
 }
 

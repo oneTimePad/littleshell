@@ -27,38 +27,52 @@ _BOOL acl_set(const char *file,acl_entry_part *acl_part){
   if((new_acl=acl_init(INIT_ENTRIES))== (acl_t)NULL)
     return FALSE;
 
-  if(acl_part->user_obj.qualifier.u_qual == USER_OBJ_QUAL) //check if there is user_obj entry to set
+
+
+  if((long)acl_part->user_obj.qualifier.u_obj_qual == USER_OBJ_QUAL){ //check if there is user_obj entry to set
+
     if(!acl_create(&new_acl,&acl_part->user_obj))
       return FALSE;
-  if(acl_part->group_obj.qualifier.g_qual == GROUP_OBJ_QUAL) //check if there is a group_obj entry to set
+  }
+  if((long)acl_part->group_obj.qualifier.g_obj_qual == GROUP_OBJ_QUAL){ //check if there is a group_obj entry to set
     if(!acl_create(&new_acl,&acl_part->group_obj))
       return FALSE;
-  if(acl_part->other.qualifier.o_qual == OTHER_QUAL) //check if there is an other entry to set
+  }
+  if(acl_part->other.qualifier.o_qual == OTHER_QUAL){ //check if there is an other entry to set
     if(!acl_create(&new_acl,&acl_part->other))
       return FALSE;
-  if(acl_part->mask.qualifier.m_qual == MASK_QUAL) //check if there is a mask entry to set
+  }
+  if(acl_part->mask.qualifier.m_qual == MASK_QUAL){ //check if there is a mask entry to set
     if(!acl_create(&new_acl,&acl_part->mask))
       return FALSE;
+  }
 
   int entry_ind =0;
   int num_users = acl_part->num_users;
-  for(;entry_ind<num_users;entry_ind++) //set user entries if any
+  for(;entry_ind<num_users;entry_ind++){ //set user entries if any
     if(!acl_create(&new_acl,&acl_part->user[entry_ind]))
       return FALSE;
+  }
   entry_ind = 0;
   int num_groups = acl_part->num_groups;
-  for(;entry_ind<num_groups;entry_ind++) //set group entries if any
+  for(;entry_ind<num_groups;entry_ind++){ //set group entries if any
     if(!acl_create(&new_acl,&acl_part->group[entry_ind]))
       return FALSE;
+  }
+
+  if(acl_valid(new_acl)!=ACL_OK){
+    errno = -1;
+    return FALSE;
+  }
 
   //write to file from memory
   if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
     return FALSE;
-
+    /*
   if(acl_free(&acl)!=ACL_OK)
     return FALSE;
   if(acl_free(&new_acl)!=ACL_OK)
-    return FALSE;
+    return FALSE;*/
 
   return TRUE;
 }
@@ -85,14 +99,14 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
 
     switch (tag) {
       case ACL_USER_OBJ:{ //modifies the user_obj if told to
-        if(acl_part->user_obj.qualifier.u_qual != USER_OBJ_QUAL)
+        if(acl_part->user_obj.qualifier.u_obj_qual != USER_OBJ_QUAL)
           break;
         if(!acl_modify(&entry,&acl_part->user_obj,FALSE,NULL))
           return FALSE;
         break;
       }
       case ACL_GROUP_OBJ:{ //modifiers the group_obj if told to
-        if(acl_part->group_obj.qualifier.g_qual != GROUP_OBJ_QUAL)
+        if(acl_part->group_obj.qualifier.g_obj_qual != GROUP_OBJ_QUAL)
           break;
         if(!acl_modify(&entry,&acl_part->group_obj,FALSE,NULL))
           return FALSE;
@@ -169,8 +183,15 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
     }
   }
 
-  if(acl_free(&acl)!=ACL_OK)
+  if(acl_valid(acl)!=ACL_OK){
+    errno = -1;
     return FALSE;
+  }
+
+  if(acl_set_file(file,ACL_TYPE_ACCESS,acl)!=ACL_OK)
+    return FALSE;
+
+  return TRUE;
 
 }
 
@@ -192,7 +213,7 @@ _BOOL acl_rem(const char* file, acl_entry_part *acl_part){
 
     switch (tag) {
       case ACL_USER_OBJ:{ //removes the user_obj if told to
-        if(acl_part->user_obj.qualifier.u_qual != USER_OBJ_QUAL)
+        if(acl_part->user_obj.qualifier.u_obj_qual != USER_OBJ_QUAL)
           break;
           //add posix check
         if(!acl_remove(&acl,&entry,&acl_part->user_obj))
@@ -200,7 +221,7 @@ _BOOL acl_rem(const char* file, acl_entry_part *acl_part){
         break;
       }
       case ACL_GROUP_OBJ:{ //removes the group_obj if told to
-        if(acl_part->group_obj.qualifier.g_qual != GROUP_OBJ_QUAL)
+        if(acl_part->group_obj.qualifier.g_obj_qual != GROUP_OBJ_QUAL)
           break;
         if(!acl_remove(&acl,&entry,&acl_part->group_obj))
           return FALSE;
@@ -259,6 +280,14 @@ _BOOL acl_rem(const char* file, acl_entry_part *acl_part){
 
   }
 
-  if(acl_free(&acl)!=ACL_OK)
+  if(acl_valid(acl)!=ACL_OK){
+    errno = -1;
     return FALSE;
+  }
+
+
+  if(acl_set_file(file,ACL_TYPE_ACCESS,acl)!=ACL_OK)
+    return FALSE;
+
+  return TRUE;
 }

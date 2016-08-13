@@ -30,8 +30,10 @@ typedef struct _acl_entry_in{
 
   //contain id_t qualifier
   union{
-    uid_t u_qual; //user_obj/user(used to determine if in use)
-    gid_t g_qual; //group_obj/group(used to determine if in use)
+    uid_t u_qual; //user(used to determine if in use)
+    gid_t g_qual; //group(used to determine if in use)
+    long  u_obj_qual;
+    long  g_obj_qual;
     long  o_qual; //other (used to determine if in use)
     long  m_qual; //mask  (used to detemine if in use)
     long  zero;

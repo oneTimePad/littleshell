@@ -26,7 +26,6 @@
 
 
 
-#define NO_MORE_ENTRIES 1
 
 
 //getopt_long options
