@@ -52,9 +52,22 @@ typedef union _SETFACL_OPTIONS {
     char h:1;
     char eof:1;
     char stdin:1;
+    char un1:1;
+    char un2:1;
+    char un3:1;
+    char un4:1;
+    char un5:1;
+    char un6:1;
+    char un7:1;
+    char un8:1;
+    char un9:1;
+    char un10:1;
+    char un11:1;
+    char un12:1;
+
   } bits;
 
-  unsigned int word;
+  int word;
 
 } SFA_OPTIONS;
 

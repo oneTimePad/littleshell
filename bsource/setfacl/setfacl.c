@@ -41,21 +41,24 @@ int
 main(int argc, char *argv[]){
 
   SFA_OPTIONS opt_mask;
+  opt_mask.word = 0;
   char * acl_in = NULL;
   int opt = 0;
   int long_index = 0;
   while((opt = getopt_long(argc,argv,"s:m:x:S:M:X:bkndRLPvh",long_options,&long_index))!=-1){
     switch (opt) {
       case 's':
-        printf("here");
+
         acl_in = optarg;
         opt_mask.bits.s = 1;
         break;
       case 'm':
+
         acl_in = optarg;
         opt_mask.bits.m = 1;
         break;
       case 'x':
+
         acl_in = optarg;
         opt_mask.bits.x = 1;
         break;
@@ -106,8 +109,11 @@ main(int argc, char *argv[]){
   if(!acl_short_parse(acl_in,strlen(acl_in),&acl_part))
     errnoExit("short_parse_acl()");
 
+
+
   //overwrite current ACL with new ACL
-  /*if(opt_mask.word&SET){
+  if(opt_mask.word&SET){
+
     if(!acl_set(file_name,&acl_part)){
       if(errno == -1){
         errno =0;
@@ -115,10 +121,11 @@ main(int argc, char *argv[]){
       }
       errnoExit("acl_set()");
     }
-  }*/
+  }
   //modify current ACL with new ACL
-/*  else if(opt_mask.word&MODIFY){*/
-    if(!acl_rem(file_name,&acl_part)){
+  else if(opt_mask.word&MODIFY){
+
+    if(!acl_mod(file_name,&acl_part)){
       if(errno == -1){
         errno =0;
         errExit("%s\n","the ACL that is replacing the current ACL is invalid!");
@@ -126,9 +133,10 @@ main(int argc, char *argv[]){
       errnoExit("acl_mod()");
     }
 
-  //}
+  }
   //remove entries from curent with that are in input ACL
-  /*else if(opt_mask.word&REMOVE){
+  else if(opt_mask.word&REMOVE){
+
     if(!acl_rem(file_name,&acl_part)){
       if(errno == -1){
         errno =0;
@@ -136,7 +144,10 @@ main(int argc, char *argv[]){
       }
       errnoExit("acl_rem()");
     }
-  }*/
+  }
+  else{
+    errExit("%s\n","unimplemented option");
+  }
 
 
 

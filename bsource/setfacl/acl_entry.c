@@ -378,6 +378,15 @@ _BOOL acl_remove(acl_t * acl, acl_entry_t *entry,acl_entry_in *entry_in){
     errno = EINVAL;
     return FALSE;
   }
+  acl_permset_t permset;
+  if(!acl_get_permset(*entry,&permset))
+    return FALSE;
+  int verify_bits = 0;
+  verify_bits += ((entry_in->permset.nibble)&READ&&acl_get_perm(permset,ACL_READ)|| !(entry_in->permset.nibble&READ)) ? 1 : 0;
+  verify_bits += ((entry_in->permset.nibble&WRITE)&&acl_get_perm(permset,ACL_WRITE)|| !(entry_in->permset.nibble&WRITE)) ? 1 : 0;
+  verify_bits = ((entry_in->permset.nibble&EXEC)&&acl_get_perm(permset,ACL_EXECUTE)|| !(entry_in->permset.nibble&EXEC)) ? 1 : 0;
+  if(verify_bits!=VERIFIED_BITS){errno = EINVAL; return FALSE;}
+
   #endif
 
   if(acl_delete_entry(*acl,*entry)!=ACL_OK)
