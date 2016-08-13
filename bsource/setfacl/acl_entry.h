@@ -25,6 +25,9 @@
 #define NO_PERM -6666
 #define VERIFIED_BITS 3
 
+
+
+
 //holds information about entries in short form input
 typedef struct _acl_entry_in{
   acl_tag_t tag; //holds the entry's tag

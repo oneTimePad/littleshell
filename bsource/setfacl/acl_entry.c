@@ -45,7 +45,7 @@ static _BOOL set_permset(char **perm_string,acl_entry_in *entry){
     return FALSE;
   }
 
-  if(**perm_string=='\0'){
+  if(**perm_string=='\0' || **perm_string==','){
     entry->no_perm = TRUE;
     return TRUE;
   }
@@ -148,9 +148,10 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
             user_entry =&acl_part->user[acl_part->num_users++];
             //convert the qualifier name to uid (reason we added '\0')
             if((user_entry->qualifier.u_qual=getuidfromname(acl_string_cpy))==-1){
-            if(errno ==0)
-              errno = ENOENT;
-              return FALSE;
+              if(errno ==0){
+                errno = ENOENT;
+                return FALSE;
+              }
             }
             *qual_str=':';
             acl_string_cpy = qual_str+1;
@@ -163,7 +164,7 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
             user_entry->tag = ACL_USER_OBJ;
 
           }
-          if(!set_permset(&acl_string_cpy,user_entry)) return FALSE;
+          if(!set_permset(&acl_string_cpy,user_entry)){ errno=EINVAL; return FALSE;}
           break;
         case 'g': //same reason for 'u'
           if(*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
@@ -178,9 +179,10 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
             group_entry =&acl_part->group[acl_part->num_groups++];
             //convert the qualifier name to uid (reason we added '\0')
             if((group_entry->qualifier.g_qual=getgidfromname(acl_string_cpy))==-1){
-            if(errno ==0)
-            errno = ENOENT;
-            return FALSE;
+              if(errno ==0){
+              errno = ENOENT;
+              return FALSE;
+              }
             }
             *qual_str=':';
             acl_string_cpy = qual_str+1;
@@ -192,19 +194,19 @@ _BOOL acl_short_parse(const char* acl_string,size_t string_size, acl_entry_part 
             group_entry->qualifier.g_obj_qual = GROUP_OBJ_QUAL;
             group_entry->tag = ACL_GROUP_OBJ;
           }
-          if(!set_permset(&acl_string_cpy,group_entry)) return FALSE;
+          if(!set_permset(&acl_string_cpy,group_entry)){errno = EINVAL; return FALSE;}
             break;
         case 'o': // other
           if(*acl_string_cpy++!=':'||*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
           acl_part->other.qualifier.o_qual = OTHER_QUAL;
           acl_part->other.tag = ACL_OTHER;
-          if(!set_permset(&acl_string_cpy,&acl_part->other)) return FALSE;
+          if(!set_permset(&acl_string_cpy,&acl_part->other)){errno = EINVAL; return FALSE;}
           break;
         case 'm': //mask
           if(*acl_string_cpy++!=':'||*acl_string_cpy++!=':') {errno = EINVAL; return FALSE;}
           acl_part->mask.qualifier.m_qual = MASK_QUAL;
           acl_part->mask.tag = ACL_MASK;
-          if(!set_permset(&acl_string_cpy,&acl_part->mask)) return FALSE;
+          if(!set_permset(&acl_string_cpy,&acl_part->mask)){errno = EINVAL; return FALSE;}
           break;
         default: // it is something unknown
           errno = EINVAL;
@@ -373,20 +375,24 @@ _BOOL acl_modify(acl_entry_t *entry,acl_entry_in *entry_in,_BOOL add,acl_t *acl)
 _BOOL acl_remove(acl_t * acl, acl_entry_t *entry,acl_entry_in *entry_in){
   if(acl==NULL || entry==NULL){errno = EINVAL; return FALSE;}
 
-  #ifndef POSIXLY_CORRECT
-  if(!entry_in->no_perm){
+  #ifdef POSIXLY_CORRECT
+  if(entry_in->no_perm){
     errno = EINVAL;
     return FALSE;
   }
   acl_permset_t permset;
-  if(!acl_get_permset(*entry,&permset))
+  if(acl_get_permset(*entry,&permset)!=ACL_OK)
     return FALSE;
   int verify_bits = 0;
   verify_bits += ((entry_in->permset.nibble)&READ&&acl_get_perm(permset,ACL_READ)|| !(entry_in->permset.nibble&READ)) ? 1 : 0;
   verify_bits += ((entry_in->permset.nibble&WRITE)&&acl_get_perm(permset,ACL_WRITE)|| !(entry_in->permset.nibble&WRITE)) ? 1 : 0;
-  verify_bits = ((entry_in->permset.nibble&EXEC)&&acl_get_perm(permset,ACL_EXECUTE)|| !(entry_in->permset.nibble&EXEC)) ? 1 : 0;
+  verify_bits += ((entry_in->permset.nibble&EXEC)&&acl_get_perm(permset,ACL_EXECUTE)|| !(entry_in->permset.nibble&EXEC)) ? 1 : 0;
   if(verify_bits!=VERIFIED_BITS){errno = EINVAL; return FALSE;}
-
+  #else
+  if(!entry_in->no_perm){
+    errno = EINVAL;
+    return FALSE;
+  }
   #endif
 
   if(acl_delete_entry(*acl,*entry)!=ACL_OK)

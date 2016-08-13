@@ -13,8 +13,7 @@
 #include "setfacl.h"
 
 
-
-
+#define POSIXLY_CORRECT 1
 
 static struct option long_options[] = {
   {"set", required_argument,    0 , 's'},
