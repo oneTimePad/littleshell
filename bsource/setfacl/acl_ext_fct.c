@@ -123,7 +123,7 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
           else if(errno=EINVAL)
             return FALSE;
         }
-        entry_in->qualifier.zero = USED;
+        entry_in->qualifier.zero = USED;  //mark this entry as used
         if(!acl_modify(&entry,entry_in,FALSE,NULL))
           return FALSE;
         break;
@@ -139,8 +139,7 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
           else if(errno==EINVAL)
             return FALSE;
         }
-
-        entry_in->qualifier.zero = USED;
+        entry_in->qualifier.zero = USED; //mark this entry as used
         if(!acl_modify(&entry,entry_in,FALSE,NULL))
           return FALSE;
         break;
@@ -259,4 +258,7 @@ _BOOL acl_rem(const char* file, acl_entry_part *acl_part){
     }
 
   }
+
+  if(acl_free(&acl)!=ACL_OK)
+    return FALSE;
 }
