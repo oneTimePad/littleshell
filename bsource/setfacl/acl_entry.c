@@ -50,6 +50,16 @@ static _BOOL set_permset(char **perm_string,acl_entry_in *entry){
     return TRUE;
   }
 
+  int verify_bits = 0;
+  verify_bits += (**perm_string=='r' || **perm_string=='-') ? 1 : 0;
+  verify_bits += (*((*perm_string)+1) == 'w' || *((*perm_string)+1) =='-') ? 1 :0;
+  verify_bits += (*((*perm_string)+2) == 'x' || *((*perm_string)+2) =='-') ? 1 :0;
+
+  if(verify_bits!=VERIFIED_BITS){
+    errno = EINVAL;
+    return FALSE;
+  }
+
 
   entry->no_perm = FALSE;
   entry->permset.bits.r = (*(*perm_string)++=='r') ? 1 : 0;
