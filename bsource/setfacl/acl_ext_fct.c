@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/acl.h>
+#include <acl/libacl.h>
 #include "acl_entry.h"
 #include "acl_ext_fct.h"
 
@@ -122,6 +123,7 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
       case ACL_MASK:{ //modifiers mask if told to
         if(acl_part->mask.qualifier.m_qual != MASK_QUAL)
           break;
+        acl_part->mask.qualifier.zero = USED;
         if(!acl_modify(&entry,&acl_part->mask,FALSE,NULL))
           return FALSE;
           break;
@@ -183,7 +185,13 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
     }
   }
 
+  if(acl_part->mask.qualifier.m_qual == MASK_QUAL && acl_part->mask.tag == ACL_MASK){
+      if(!acl_modify(NULL,&acl_part->mask,TRUE,&acl))
+        return FALSE;
+  }
+
   if(acl_valid(acl)!=ACL_OK){
+
     errno = -1;
     return FALSE;
   }

@@ -118,7 +118,7 @@ main(int argc, char *argv[]){
   }*/
   //modify current ACL with new ACL
 /*  else if(opt_mask.word&MODIFY){*/
-    if(!acl_mod(file_name,&acl_part)){
+    if(!acl_rem(file_name,&acl_part)){
       if(errno == -1){
         errno =0;
         errExit("%s\n","the ACL that is replacing the current ACL is invalid!");
