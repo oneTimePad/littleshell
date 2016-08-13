@@ -16,7 +16,7 @@
 #define OTHER_QUAL     (long)-3000
 #define MASK_QUAL      (long)-4000
 #define USED           (long)-5000
-#define ISVALIDQUAL(x){(x!=USER_OBJ_QUAL&&x!=GROUP_OBJ_QUAL&&x!=OTHER_QUAL&&x!=MASK_QUAL)? FALSE: TRUE}
+#define ISVALIDQUAL(x) (x!=USER_OBJ_QUAL&&x!=GROUP_OBJ_QUAL&&x!=OTHER_QUAL&&x!=MASK_QUAL)? FALSE: TRUE
 #define READ  1
 #define WRITE 2
 #define EXEC  4
@@ -48,7 +48,7 @@ typedef struct _acl_entry_in{
     unsigned char nibble:4;
   } permset;
 
-  _BOOL no_perm
+  _BOOL no_perm;
 
 } acl_entry_in;
 
@@ -69,8 +69,9 @@ typedef struct _acl_entry_partition{
 
 void acl_part_init(acl_entry_part *);
 _BOOL acl_short_parse(const char *,size_t, acl_entry_part *);
+_BOOL acl_find_entry_with_qual(uid_t *,gid_t *,acl_entry_part *,acl_entry_in **);
 _BOOL acl_create(acl_t *,acl_entry_in *);
 _BOOL acl_modify(acl_entry_t *,acl_entry_in *, _BOOL, acl_t *);
 _BOOL acl_find_entry_with_qual(uid_t *,gid_t *,acl_entry_part *,acl_entry_in **);
-_BOOL acl_remove(acl_t *, acl_entry_t *);
+_BOOL acl_remove(acl_t *, acl_entry_t *, acl_entry_in *);
 #endif
