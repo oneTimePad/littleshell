@@ -1,4 +1,4 @@
-all: shell id ls setfacl getfacl setfattr
+all: shell id ls setfacl getfacl setfattr getfattr
 
 shell: executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
 	gcc -pthread -g -o shell shell.c executable.o processmanager.o tokenizer.o errors.o internal.o utils.o
@@ -35,6 +35,9 @@ getfacl: bool.h errors.h ./bsource/getfacl/getfacl.h
 
 setfattr: bool.h errors.h ./bsource/setfattr/setfattr.h
 	gcc -g -o ./bin/setfattr ./bsource/setfattr/setfattr.c errors.c
+
+getfattr: bool.h errors.h ./bsource/getfattr/getfattr.h
+	gcc -g -o ./bin/getfattr ./bsource/getfattr/getfattr.c errors.c
 
 clean:
 	rm -rf shell *.o ./bin/*

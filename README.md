@@ -5,3 +5,5 @@
 - id
 - setfacl
 - getfacl
+- setfattr
+- getfattr

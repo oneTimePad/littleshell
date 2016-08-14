@@ -106,7 +106,8 @@ main(int argc, char *argv[]){
 
   acl_entry_part acl_part;
   acl_part_init(&acl_part);
-
+  if(acl_in == NULL)
+    errExit("%s\n","requires short form acl string");
   if(!acl_short_parse(acl_in,strlen(acl_in),&acl_part))
     errnoExit("short_parse_acl()");
 
