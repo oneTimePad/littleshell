@@ -1,6 +1,6 @@
 # littleshell
 ##simple unix shell
-##also currently also implements the following unix binaries:
+##also currently implements the following unix binaries:
 - ls
 - id
 - setfacl
