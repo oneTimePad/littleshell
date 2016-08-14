@@ -13,7 +13,9 @@
 #include "setfacl.h"
 
 
-#define POSIXLY_CORRECT 1
+/*
+* doesn't free any resources with acl_free()
+*/
 
 static struct option long_options[] = {
   {"set", required_argument,    0 , 's'},

@@ -69,6 +69,8 @@ _BOOL acl_set(const char *file,acl_entry_part *acl_part){
   //write to file from memory
   if(acl_set_file(file,ACL_TYPE_ACCESS,new_acl)!=ACL_OK)
     return FALSE;
+
+
     /*
   if(acl_free(&acl)!=ACL_OK)
     return FALSE;
@@ -104,6 +106,7 @@ _BOOL acl_mod(const char *file, acl_entry_part *acl_part){
           break;
         if(!acl_modify(&entry,&acl_part->user_obj,FALSE,NULL))
           return FALSE;
+
         break;
       }
       case ACL_GROUP_OBJ:{ //modifiers the group_obj if told to
