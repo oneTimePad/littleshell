@@ -6,7 +6,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include "bool.h"
-
+extern const char * const sys_siglist[];
 extern pthread_mutex_t stdout_lock;
 typedef enum {FORE , BACK} _GROUND;
 

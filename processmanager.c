@@ -99,9 +99,17 @@ void process_trace(PMANAGER* pman,pid_t job){
   }
   //if process was killed by ctl-C
   else if(WIFSIGNALED(status)){
-    //print killed message
+
     pthread_mutex_lock(&stdout_lock);
-    printf("killed\n");
+    char *str_sig;
+    if((str_sig=strsignal(WTERMSIG(status))) == NULL)
+      errnoExit("strsignal()");
+    printf("%s ",str_sig);
+    #ifdef WCOREDUMP
+    if(WCOREDUMP(status))
+      printf("(core dumped)");
+    #endif
+    printf("\n");
     pthread_mutex_unlock(&stdout_lock);
   }
 }

@@ -32,6 +32,10 @@ void process_clean(PMANAGER* pman){
   }
 }
 
+void term_handler(int sig){
+
+}
+
 static char LPATH[] = "LPATH=./bin/:";
 
 
@@ -57,6 +61,15 @@ int main(){
   pthread_t clean_thread;
   if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_clean,pman)!=0)
     errnoExit("pthread_create()");
+
+
+  struct sigaction term_action;
+  term_action.sa_flags = 0;
+  term_action.sa_handler = &term_handler;
+  if(sigemptyset(&term_action.sa_mask) ==-1)
+    errnoExit("sigemptyset()");
+  if(sigaction(SIGTERM,&term_action,NULL)==-1)
+    errnoExit("sigaction()");
 
 
   //ignore termination and suspension
