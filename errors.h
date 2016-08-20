@@ -7,11 +7,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <signal.h>
 #include "bool.h"
 
+#ifndef SIG_FCHLD
+  #define SIG_FCHLD SIGRTMIN+7
+#endif
 
 inline void errnoExit(const char* fct_name);
 inline  void usageExit(const char* format,...);
+inline void chldExit(const char* );
 
 
 #endif

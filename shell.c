@@ -18,28 +18,22 @@
 
 
 
-pthread_mutex_t stdout_lock;
 
-/**
-* looks for processes to cleanup, called by separate thread
-* arg: ptr to struct containg the arguments for this routine
-  -> pman: process manager and stdout_lock: lock for printf
-**/
-void process_clean(PMANAGER* pman){
-
-  while(1){
-    process_cleanup(pman);
-  }
-}
-
+volatile sig_atomic_t term_signal = 0;
 void term_handler(int sig){
-
+    term_signal = 1;
 }
 
 static char LPATH[] = "LPATH=./bin/:";
 
 
 int main(){
+  //ignore termination and suspension
+  signal(SIGTSTP,SIG_IGN);
+  signal(SIGINT,SIG_IGN);
+  signal(SIGQUIT,SIG_IGN);
+
+
   if(putenv(LPATH)!=0)
     errnoExit("putenv");
 
@@ -72,13 +66,8 @@ int main(){
     errnoExit("sigaction()");
 
 
-  //ignore termination and suspension
-  signal(SIGTSTP,SIG_IGN);
-  signal(SIGINT,SIG_IGN);
-  pid_t my_pid = getpid();
-  //put shell in foreground
-  tcsetpgrp(0,my_pid);
-  pman->foreground_group=my_pid;
+
+
 
   printf("Welcome To littleshell\n \rtype help\n\n");
 
@@ -118,7 +107,8 @@ int main(){
 
 //main loop
   while(1){
-
+    if(term_signal)
+      shell_exit(pman,NULL);
 
     //read use input to shell
 
@@ -129,6 +119,7 @@ int main(){
     ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
     TOKENS* curr_tkn;
 
+    process_reap(pman);
 
     if(bytes_read==-1){
       continue;
@@ -176,6 +167,7 @@ int main(){
     //clean up
 
     destroyTokens(curr_tkn);
+    process_reap(pman);
   }
 
   return 0;

@@ -13,5 +13,6 @@
 #define NONE  -1
 
 inline short isInternalCommand(char*);
+inline void shell_exit(PMANAGER*,TOKENS*);
 inline _BOOL internal_command(short,PMANAGER*, char*,TOKENS*);
 #endif

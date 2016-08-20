@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
 #include "internal.h"
 
 
@@ -15,16 +16,18 @@ static char* help_info[] = {
 
 };
 
-static inline void shell_exit(PMANAGER* pman,TOKENS* curr_tkn){
+inline void shell_exit(PMANAGER* pman,TOKENS* curr_tkn){
   //terminate all processes
   int i =0;
   for(;i<MAX_PROCESSES;i++)
     if(pman->processpids[i]!=-1)
-      kill(pman->processpids[i],SIGINT);
+      kill(pman->processpids[i],SIGTERM);
 
-
-  destroyTokens(curr_tkn);
+  if(curr_tkn!=NULL)
+    destroyTokens(curr_tkn);
   while(wait()!=-1);
+  if(errno!=ECHILD && errno != 0)
+    errnoExit("wait()");
   exit(EXIT_SUCCESS);
 
 }

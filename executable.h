@@ -4,6 +4,7 @@
 #include "bool.h"
 #include "tokenizer.h"
 #include "processmanager.h"
+#include <signal.h>
 
 #ifdef _GNU_SOURCE
 #include <linux/limits.h>
@@ -11,6 +12,8 @@
 #else
 #define PATH_LIM 8012
 #endif
+
+#define MAX_ENV 50
 
 
 extern pthread_mutex_t stdout_lock;

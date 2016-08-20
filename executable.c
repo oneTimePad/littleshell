@@ -236,9 +236,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
   int num_foregrounds = 0;
   int foregrounds[MAX_PROCESSES];
 
-  //to avoid race disable sigint and sigtstp
-  signal(SIGINT,SIG_BLOCK);
-  signal(SIGTSTP,SIG_BLOCK);
+
   //look through info for all processes to be created
   EMBRYO* embryos = NULL;
   int i =0;
@@ -252,82 +250,142 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
 
 
 
-    int pid;
+    pid_t pid;
     //set child image
-    if((pid=fork())==0){
-      signal(SIGINT,SIG_DFL);
-      signal(SIGTSTP,SIG_DFL);
-      //duplicate std files if necessary
-      if(embryos->p_stdin!=-1){
-        dup2(embryos->p_stdin,0);
-        close(embryos->p_stdin);
+    switch ((pid=fork())) {
+      case -1:{
+        errnoExit("fork()");
       }
-      if(embryos->p_stdout!=-1){
-        dup2(embryos->p_stdout,1);
-        close(embryos->p_stdout);
-      }
-      //close unused end
-      close(pipe_ends[0]);
+      case 0:{
+        sigset_t blockset;
+        if(sigemptyset(&blockset)==-1)
+          chldExit("sigemptyset()");
+        if(sigaddset(&blockset,SIG_FCHLD)==-1)
+          chldExit("sigaddset()");
+        if(sigprocmask(SIG_UNBLOCK,&blockset,NULL)==-1)
+          chldExit("sigprocmask()");
 
-      //this setup is done in the parent and child to avoid race-condition
-      //if foreground put it in the foreground group
-      if(!embryos->background){
-        setpgid(getpid(),foreground_group);
-
-      }
-      //if background put it in the background group
-      else{
-        //this might be the first process in this group
-        if(*background_group==-1){
-          *background_group = getpid();
+        //duplicate std files if necessary
+        if(embryos->p_stdin!=-1 && embryos->p_stdin!=STDIN_FILENO){
+          if(dup2(embryos->p_stdin,STDIN_FILENO) == -1)
+            chldExit("dup2()");
+          if(close(embryos->p_stdin)==-1)
+            chldExit("close()");
         }
-        setpgid(getpid(),*background_group);
+        if(embryos->p_stdout!=-1 && embryos->p_stdout!=STDOUT_FILENO){
+          if(dup2(embryos->p_stdout,STDOUT_FILENO)==-1)
+            chldExit("dup2()");
+          if(close(embryos->p_stdout)==-1)
+            chldExit("close()");
+        }
+        //close unused end
+        if(close(pipe_ends[0])==-1)
+          chldExit("close()");
+
+        if(kill(getppid(),SYNC_SIG)==-1)
+          chldExit("kill()");
+
+
+
+        //overwride parent signal ignoring
+        signal(SIGINT,SIG_DFL);
+        signal(SIGQUIT,SIG_DFL);
+        signal(SIGTSTP,SIG_DFL);
+
+        siginfo_t signal_info;
+        if(sigwaitinfo(&blockset,&signal_info)== -1)
+          chldExit("sigwaitinfo()");
+
+          //all errors after sigwaitinfo() must be caught by waiting on proc
+        if(signal_info.si_signo!= SYNC_SIG)
+          chldExit("sigwaitinfo()");
+
+
+        if(sigaddset(&blockset,SYNC_SIG)==-1)
+          chldExit("sigaddset()");
+        if(sigprocmask(SIG_UNBLOCK,&blockset,NULL)==-1)
+          chldExit("sigprocmask()");
+        //give it a clean env for security reasons
+
+        char* envp[MAX_ENV];
+        envp[MAX_ENV-1] = NULL;
+
+        //start
+        if(execve(embryos->arguments[0],embryos->arguments,envp)==-1)
+          chldExit("execve()");
+
+        break;
+
 
       }
-
-      //start
-      if(execv(embryos->arguments[0],embryos->arguments)!=0)
-        return FALSE;
-
-    }
     //parent
-    else{
-      //clean up files if necessary
-      if(embryos->p_stdin!=-1)
-        close(embryos->p_stdin);
-      if(embryos->p_stdout!=-1)
-        close(embryos->p_stdout);
-
-      //initialize process to table
-      if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background))
-        return FALSE;
-      //put it in the foreground table if it is not a bg process
-      if(!embryos->background){
-        foregrounds[num_foregrounds++]=pid;
-
-        setpgid(pid,foreground_group);
-
-      }
-      //put process in background group
-      else{
-        if(*background_group==-1){
-          *background_group = pid;
+      default:{
+        siginfo_t signal_info;
+        if(sigaddset(&blockset,SIG_FCHLD)==-1){
+          kill(pid,SIGKILL);
+          errnoExit("sigaddset()");
         }
-        setpgid(pid,*background_group);
+        if(sigwaitinfo(&blockset,&signal_info)==-1){
+          kill(pid,SIGKILL);
+          errnoExit("sigwaitinfo()");
+        }
+        if(signal_info.si_signo==SIG_FCHLD){
+          fprintf(stderr,"%s\n","new process failed to be created");
+
+          //clean up files if necessary
+          if(embryos->p_stdin!=-1)
+            close(embryos->p_stdin);
+          if(embryos->p_stdout!=-1)
+            close(embryos->p_stdout);
+          return FALSE;
+        }
+        else if(signal_info.si_signo!= SYNC_SIG){
+          kill(pid,SIGKILL);
+          errExit("%s\n","unrecognized synchronize signal");
+        }
+
+        //clean up files if necessary
+        if(embryos->p_stdin!=-1)
+          close(embryos->p_stdin);
+        if(embryos->p_stdout!=-1)
+          close(embryos->p_stdout);
+
+        //initialize process to table
+        if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background))
+          return FALSE;
+        //put it in the foreground table if it is not a bg process
+        if(!embryos->background){
+          foregrounds[num_foregrounds++]=pid;
+
+          setpgid(pid,foreground_group);
+
+        }
+        //put process in background group
+        else{
+          if(*background_group==-1){
+            *background_group = pid;
+          }
+          setpgid(pid,*background_group);
+        }
+
+        if(kill(pid,SYNC_SIG)==-1){
+          kill(pid,SIGKILL);
+          errnoExit("kill()");
+        }
+
+        break;
 
       }
     }
-
+    signal(SYNC_SIG,SIG_IGN); //clear pending signals
+    signal(SIG_FCHLD,SIG_IGN);
+    signal(SYNC_SIG,SIG_DFL);
+    signal(SIG_FCHLD,SIG_DFL);
   }
-  //start ignoring them again
-  signal(SIGINT,SIG_IGN);
-  signal(SIGTSTP,SIG_IGN);
 
-  //clean up all foregrounds
-  i =0;
-  for(;i<num_foregrounds;i++){
-      process_trace(pman,foregrounds[i]);
-  }
+
+
+
 
   return TRUE;
 

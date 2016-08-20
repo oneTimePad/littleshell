@@ -5,9 +5,17 @@
 #define MAX_ARGUMENT 10
 #include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include "bool.h"
+
+#ifndef SYNC_SIG
+  #define SYNC_SIG SIGUSR1
+#endif
+#ifndef SIG_FCHLD
+  #define SIG_FCHLD SIGRTMIN+7
+#endif
+
 extern const char * const sys_siglist[];
-extern pthread_mutex_t stdout_lock;
 typedef enum {FORE , BACK} _GROUND;
 
 //used for storing info on a process to be created
@@ -25,20 +33,17 @@ typedef struct _PMANAGER{
   char processnames[MAX_PROCESS_NAME][MAX_PROCESSES];
   // contains a list of process pid's
   pid_t processpids[MAX_PROCESSES];
-  // list of which processes are background and foreground
-  _GROUND groundstatus[MAX_PROCESSES];
-  // list of pipe read file descriptors to poll on, determines if child died
-  struct pollfd procspipe[MAX_PROCESSES];
   // says if process is currently suspended
   _BOOL suspendedstatus[MAX_PROCESSES];
   //process group ids
   pid_t foreground_group;
   pid_t background_group;
 
+  int sig_fchl_fd;
+
   //return status of most recent foreground process
   int recent_foreground_status;
-  //synchronize tables
-  pthread_mutex_t mutex;
+
 } PMANAGER;
 
 _BOOL process_manager_init(PMANAGER*);

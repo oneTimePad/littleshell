@@ -23,15 +23,29 @@ _BOOL process_manager_init(PMANAGER* pman){
     int i =0;
     for(;i<MAX_PROCESSES;i++){
       pman->processpids[i]=-1;
-      pman->procspipe[i].fd=-1;
     }
     pman->foreground_group=-1;
     pman->background_group=-1;
     pman->recent_foreground_status = 0;
-    if(pthread_mutex_init(&(pman->mutex),NULL)!=0){
-      perror("pthread_mutex_init()");
-      return FALSE;
-    }
+
+    sigset_t blockset;
+    if(sigemptyset(&blockset) == -1)
+      errnoExit("sigemptyset()");
+    if(sigaddset(&blockset,SIG_FCHLD)==-1)
+      errnoExit("sigaddset()");
+
+    if((pman->sig_fchl_fd=signalfd(-1,&blockset,SFD_NONBLOCK | SFD_CLOEXEC)) ==-1)
+      errnoExit("signalfd()");
+
+    if(sigaddset(&blockset,SYNC_SIG)==-1)
+      errnoExit("sigaddset()");
+    if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
+      errnoExit("sigprocmask()");
+
+    pid_t my_pid = getpid();
+    //put shell in foreground
+    tcsetpgrp(0,my_pid);
+    pman->foreground_group=my_pid;
 
     return TRUE;
 }
@@ -45,73 +59,116 @@ _BOOL process_manager_init(PMANAGER* pman){
 * ground: process is fore or background
 * returns: status of success
 **/
-_BOOL process_init(PMANAGER* pman,char* name,pid_t pid, int* pipe_ends, int ground){
-  pthread_mutex_lock(&pman->mutex);
+_BOOL process_init(PMANAGER* pman,char* name,pid_t pid){
+
   //look for unused process entry
-  int i =0;
-  for(;i<MAX_PROCESSES;i++)
-    if(pman->processpids[i]==-1)
-      break;
+  int i =-1;
+  while((++i)<MAX_PROCESSES && pman->processpids[i]!=-1);
 
-  int read_end = pipe_ends[0];
-  int write_end = pipe_ends[1];
+  if(i<MAX_PROCESSES){
+    //set process image name
+    int name_length = strlen(name);
+    strncpy(pman->processnames[i],name,name_length);
+    pman->processnames[i][name_length]='\0';
+    pman->processpids[i] = pid;
+  }
+  else
+    return FALSE;
 
-  close(write_end);
-  //set pipe fd to poll on
-  pman->procspipe[i].fd = read_end;
 
-  pman->procspipe[i].events = POLLHUP;
-
-
-  //set process image name
-  int name_length = strlen(name);
-  strncpy(pman->processnames[i],name,name_length);
-  pman->processnames[i][name_length]=0x0;
-  pman->processpids[i] = pid;
-  pman->groundstatus[i] = ground;
-
-  pthread_mutex_unlock(&pman->mutex);
   return TRUE;
 }
 
+/**
+* get the index of process with pid job
+* returns index on success, -1 on error
+**/
+int process_search(pid_t job){
+  int i =0;
+  while(i++<MAX_PROCESSES&&pman->processpids[i]!=job);
+  return (i<MAX_PROCESSES) ? i : -1;
+}
 
-void process_trace(PMANAGER* pman,pid_t job){
-    int status;
-  waitpid(job,&status,WUNTRACED);
-  pthread_mutex_lock(&pman->mutex);
-  pman->recent_foreground_status = status;
-  pthread_mutex_unlock(&pman->mutex);
+void process_wait_foreground(PMANAGER *pman){
+  if(pman->foreground_group == -1) //never happens
+    errExit("%s\n","no foreground group but foreground processes exist");
+  int status;
+  pid_t job;
+  //wait for all processes in the foreground group
+  while((job = waitpid(-1*pman->foreground_group,&status,WUNTRACED))!=-1)
+    process_status(pman,job,status);
+}
+
+/**
+* looks for process status changes and failures
+* pman: ptr to process manager
+**/
+void process_reap(PMANAGER *pman){
+  int status;
+  pid_t job;
+  //poll for processes with status changes
+  while((job = waitpid(-1,&status,WNOHANG | WUNTRACED | WIFCONTINUED))!=0 && job!=-1){
+      process_status(pman,job,status);
+  }
+
+  if(errno != ECHILD && errno !=0)
+    errnoExit("waitpid()");
+  struct signalfd_siginfo info;
+  memset(&info,0,sizeof(struct signalfd_siginfo));
+  //look for child processes that failed to start up and exec
+  //these processes signaled RTSIG SIG_FCHLD
+  //poll for pending signals
+  while(read(pman->sig_fchl_fd,&info,sizeof(struct signalfd_siginfo))== sizeof(struct signalfd_siginfo)){
+      if(info.ssi_signo != SIG_FCHLD) errExit("%s\n","unknown error occured while reaping processes"); //never happens
+      int32_t pid = info.ssi_int;
+      int index = process_search(pid);
+      if(index == -1) errExit("%s\n","unknown error occured while reaping processes"); //should never happen
+      fprintf(stderr,"%s:%s\n","Failed to create job",pman->processnames[index]);
+      //the process failed but it did have a process entry, so remove it
+      process_destroy(pman,index);
+  }
+}
+
+
+void process_status(PMANAGER* pman,pid_t job, int status){
+  int index = process_search(job);
+  if(index == -1) return FALSE;
   //if process was suspended
   if(WIFSTOPPED(status)){
     //if it was the cause of ctl-Z
-    if(WSTOPSIG(status)==SIGTSTP){
-      //set process to paused state
-      pthread_mutex_lock(&pman->mutex);
-      int j =0;
-      for(;j<MAX_PROCESSES;j++){
-        if(pman->processpids[j]==job){
-          pman->suspendedstatus[j]=TRUE;
-          break;
-        }
-      }
-      pthread_mutex_unlock(&pman->mutex);
-    }
+    pman->suspendedstatus[index]=TRUE;
+    printf("Stopped                   %s",pman->processnames[index]);
   }
-  //if process was killed by ctl-C
+  //if process was killed by a signal
   else if(WIFSIGNALED(status)){
-
-    pthread_mutex_lock(&stdout_lock);
+    //if it was SIGKILL, print the killed msg
+    if(WTERMSIG(status) == SIGKILL){
+      printf("Killed                  %s",pman->processnames[index])
+    }
+    //convert signal to strmsg
     char *str_sig;
     if((str_sig=strsignal(WTERMSIG(status))) == NULL)
       errnoExit("strsignal()");
-    printf("%s ",str_sig);
+    else
+      printf("%s ",str_sig);
+    //notify of core dump
     #ifdef WCOREDUMP
     if(WCOREDUMP(status))
       printf("(core dumped)");
     #endif
-    printf("\n");
-    pthread_mutex_unlock(&stdout_lock);
+
   }
+  //if a process was continued without the use of fg
+  //then it must be backgrounded
+  else if(WIFCONTINUED(status)){
+    pman->suspendedstatus[index] = TRUE;
+    if(setpgid(job,pman->background_group))
+    printf("Continued                %s",pman->processnames[index]);
+  }
+
+  printf("\n");
+
+
 }
 
 
@@ -122,28 +179,29 @@ void process_trace(PMANAGER* pman,pid_t job){
 * returns: status
 **/
 _BOOL process_foreground(PMANAGER* pman,pid_t job){
-  int i =0;
-  for(;i<MAX_PROCESSES;i++)
-    if(pman->processpids[i]==job)
-      break;
-  if(i == MAX_PROCESSES) return FALSE;
+  int index = process_search(job);
+  if(index == -1) return FALSE;
 
-  if(pman->suspendedstatus[i]&&pman->groundstatus[i]==FORE){
-    kill(job,SIGCONT);
+
+  int pgrp = getpgid(job);
+
+  if(pman->suspendedstatus[i] && pgrp == pman->process_foreground){
+    if(kill(job,SIGCONT)==-1)
+      errnoExit("kill()");
   }
-  else if(pman->groundstatus[i]==BACK){
-    pthread_mutex_lock(&pman->mutex);
-    pman->groundstatus[i]=FORE;
-    pthread_mutex_unlock(&pman->mutex);
-    setpgid(job,pman->foreground_group);
-    kill(job,SIGCONT);
+  else if(pgrp == pman->background_group){
+    if(setpgid(job,pman->foreground_group)==-1)
+      errnoExit("setpgid()");
+    if(kill(job,SIGCONT)==-1)
+      errnoExit("kill()");
   }
   else
     return FALSE;
-  pthread_mutex_lock(&pman->mutex);
+
   pman->suspendedstatus[i]=FALSE;
-  pthread_mutex_unlock(&pman->mutex);
-  process_trace(pman,job);
+  //wait for this process to finish
+  process_wait_foreground(pman);
+
   return TRUE;
 }
 
@@ -155,21 +213,17 @@ _BOOL process_foreground(PMANAGER* pman,pid_t job){
 **/
 _BOOL process_background(PMANAGER* pman, pid_t job){
 
-  int i =0;
-  for(;i<MAX_PROCESSES;i++)
-    if(pman->processpids[i]==job)
-      break;
+  int index = process_search(job);
+  if(index == -1) return FALSE;
 
-  if(i == MAX_PROCESSES) return FALSE;
+  int pgrp = getpgid(job);
 
-
-  if(pman->groundstatus[i]==FORE&&pman->suspendedstatus[i]){
-    setpgid(job,pman->background_group);
-    kill(job,SIGCONT);
-    pthread_mutex_lock(&pman->mutex);
-    pman->groundstatus[i] = BACK;
+  if(pman->suspendedstatus[i] && pgrp == pman->foreground_group){
+    if(setpgid(job,pman->background_group) == -1)
+      errnoExit("setpgid()");
+    if(kill(job,SIGCONT)==-1)
+      errnoExit("kill()");
     pman->suspendedstatus[i]=FALSE;
-    pthread_mutex_unlock(&pman->mutex);
   }
   else
     return FALSE;
@@ -186,8 +240,6 @@ static void process_destroy(PMANAGER* pman,int proc_index){
 
   memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
   pman->processpids[proc_index] = -1;
-  pman->procspipe[proc_index].fd = -1;
-  pman->procspipe[proc_index].events=-1;
 }
 
 
