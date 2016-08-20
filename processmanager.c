@@ -96,7 +96,7 @@ void process_wait_foreground(PMANAGER *pman){
   pid_t job;
   //wait for all processes in the foreground group
   while((job = waitpid(-1*pman->foreground_group,&status,WUNTRACED))!=-1)
-    process_status(pman,job,status);
+    process_status(pman,job,status,FALSE);
 }
 
 /**
@@ -108,7 +108,8 @@ void process_reap(PMANAGER *pman){
   pid_t job;
   //poll for processes with status changes
   while((job = waitpid(-1,&status,WNOHANG | WUNTRACED | WIFCONTINUED))!=0 && job!=-1){
-      process_status(pman,job,status);
+      process_status(pman,job,status,TRUE);
+
   }
 
   if(errno != ECHILD && errno !=0)
@@ -130,7 +131,7 @@ void process_reap(PMANAGER *pman){
 }
 
 
-void process_status(PMANAGER* pman,pid_t job, int status){
+void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
   int index = process_search(job);
   if(index == -1) return FALSE;
   //if process was suspended
@@ -164,6 +165,10 @@ void process_status(PMANAGER* pman,pid_t job, int status){
     pman->suspendedstatus[index] = TRUE;
     if(setpgid(job,pman->background_group))
     printf("Continued                %s",pman->processnames[index]);
+  }
+
+  else if(WIFEXITED(status) && done_print){
+    printf("DONE                     %s",pman->processnames[index]);
   }
 
   printf("\n");
@@ -242,46 +247,6 @@ static void process_destroy(PMANAGER* pman,int proc_index){
   pman->processpids[proc_index] = -1;
 }
 
-
-/**
-* ran in separate thread. look for dead processes to clean up
-* pman: ptr to process manager
-**/
-void process_cleanup(PMANAGER* pman){
-
-    //notified when child closes pipe write end
-
-    int status = poll(pman->procspipe,MAX_PROCESSES,0);
-
-    if(status>0){
-
-      int i =0;
-      pthread_mutex_lock(&pman->mutex);
-      for(;i<MAX_PROCESSES;i++){
-
-        //if child closed pipe write end
-        if(pman->procspipe[i].revents == POLLHUP){
-
-          //clean up
-          int status;
-          waitpid(pman->processpids[i],&status,WNOHANG);
-
-          // if it is background, send a msg to stdout
-          if(pman->groundstatus[i]==BACK){
-            pthread_mutex_lock(&stdout_lock);
-            printf("DONE: %s\n",pman->processnames[i]);
-            pthread_mutex_unlock(&stdout_lock);
-          }
-          process_destroy(pman,i);
-
-        }
-      }
-      pthread_mutex_unlock(&pman->mutex);
-
-    }
-
-
-}
 
 /**
 * prints out a list of active processes

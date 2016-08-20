@@ -28,82 +28,8 @@ static char LPATH[] = "LPATH=./bin/:";
 
 
 int main(){
-  //ignore termination and suspension
-  signal(SIGTSTP,SIG_IGN);
-  signal(SIGINT,SIG_IGN);
-  signal(SIGQUIT,SIG_IGN);
-
-
-  if(putenv(LPATH)!=0)
-    errnoExit("putenv");
-
-  //create structure to hold process manager and lock for stdout
-  PMANAGER * pman = (PMANAGER*)malloc(sizeof(PMANAGER));
-  if(pman == NULL)
-    errnoExit("malloc()");
-
-
-  //initialize the process manager
-  if(!process_manager_init(pman))
-    errExit("%s\n","process table initialization failed");
-
-  //initialize the stdout mutex
-  if(pthread_mutex_init(&stdout_lock,NULL)!=0)
-    errnoExit("pthread_mutex_init()");
-
-  //create thread that looks for processes to clean
-  pthread_t clean_thread;
-  if(pthread_create(&clean_thread,NULL,(void* (*) (void*)) process_clean,pman)!=0)
-    errnoExit("pthread_create()");
-
-
-  struct sigaction term_action;
-  term_action.sa_flags = 0;
-  term_action.sa_handler = &term_handler;
-  if(sigemptyset(&term_action.sa_mask) ==-1)
-    errnoExit("sigemptyset()");
-  if(sigaction(SIGTERM,&term_action,NULL)==-1)
-    errnoExit("sigaction()");
-
-
-
-
-
-  printf("Welcome To littleshell\n \rtype help\n\n");
-
-
-  /**
-  * print name username and host
-  **/
-  uid_t shell_id;
-  shell_id = getuid();
-
-  struct passwd* pw;
-  if( (pw = getpwuid(shell_id)) == NULL){
-    errnoExit("getpwuid()");
-    errExit("%s\n","passwd entry for uid not found");
-  }
-  char *shell_user = pw->pw_name;
-
-  long host_name_max;
-  if((host_name_max = sysconf(_SC_HOST_NAME_MAX)) == -1)
-    errnoExit("sysconf()");
-
-  char shell_host[host_name_max+1];
-  if(gethostname(shell_host,host_name_max+1)==-1)
-    errnoExit("gethostname()");
-
-  const char* shell_title = "little>";
-  #define LEN_AT 1
-  #define LEN_COLON 1
-  long total_len = strlen(shell_host)+strlen(shell_user)+strlen(shell_title)+LEN_AT+LEN_COLON+1;
-
-  char shell_name[total_len];
-  if(snprintf(shell_name,total_len,"%s@%s:%s",shell_user,shell_host,shell_title)!=total_len-1)
-    errExit("%s\n","not enough buffer space for shell_name");
-
-
-
+  PMANAGER *pman;
+  shell_init(&pman);
 
 //main loop
   while(1){

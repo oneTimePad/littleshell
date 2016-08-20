@@ -48,8 +48,13 @@ typedef struct _PMANAGER{
 
 _BOOL process_manager_init(PMANAGER*);
 _BOOL process_init(PMANAGER*,char*,pid_t, int*, int);
-static void process_destroy(PMANAGER*,int);
-void process_cleanup(PMANAGER*);
+void process_destroy(PMANAGER*,int);
+int process_search(pid_t);
+void process_wait_foreground(PMANAGER *);
+void process_reap(PMANAGER *);
+void process_status(PMANAGER *, pid_t, int,_BOOL);
+_BOOL process_foreground(PMANAGER *, pid_t);
+_BOOL process_background(PMANAGER *, pid_t);
 void process_dump(PMANAGER*);
 
 

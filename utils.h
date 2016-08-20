@@ -21,7 +21,7 @@ extern char** environ;
 
 //int safe_setenv(const char *,const char *, int);
 //int safe_unsetenv(const char *);
-_BOOL safe_access(const char*, int);
+_BOOL safe_access(const char*, int,int*);
 
 
 

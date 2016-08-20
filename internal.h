@@ -12,6 +12,7 @@
 #define HELP   6
 #define NONE  -1
 
+void shell_init(PMANAGER **);
 inline short isInternalCommand(char*);
 inline void shell_exit(PMANAGER*,TOKENS*);
 inline _BOOL internal_command(short,PMANAGER*, char*,TOKENS*);

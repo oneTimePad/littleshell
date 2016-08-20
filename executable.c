@@ -156,9 +156,9 @@ _BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_st
         //get file to open
         if((ioredir=getTokenNextCommand(tkns))==NULL)
           return FALSE;
-        if(access(ioredir,R_OK)==-1)
+        if(safe_access(ioredir,R_OK)==-1)
           return FALSE;
-        new_std_in = open(ioredir,O_RDONLY);
+        if((new_std_in = open(ioredir,O_RDONLY)) == -1)
       }
       //if it's a > redirect standard output
       else if(strcmp(possible_meta,">")==0){
@@ -242,10 +242,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
   int i =0;
   for(;i<num_procs_in_pipe;i++){
     embryos = new_proc+i;
-    //pipe for watching child
-    int pipe_ends[2];
-    if(pipe(pipe_ends)==-1)
-      return FALSE;
+
 
 
 
@@ -254,7 +251,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
     //set child image
     switch ((pid=fork())) {
       case -1:{
-        errnoExit("fork()");
+        return FALSE;
       }
       case 0:{
         sigset_t blockset;
@@ -278,9 +275,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
           if(close(embryos->p_stdout)==-1)
             chldExit("close()");
         }
-        //close unused end
-        if(close(pipe_ends[0])==-1)
-          chldExit("close()");
+
 
         if(kill(getppid(),SYNC_SIG)==-1)
           chldExit("kill()");
@@ -323,32 +318,40 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
         siginfo_t signal_info;
         if(sigaddset(&blockset,SIG_FCHLD)==-1){
           kill(pid,SIGKILL);
-          errnoExit("sigaddset()");
+          return FALSE;
         }
         if(sigwaitinfo(&blockset,&signal_info)==-1){
           kill(pid,SIGKILL);
-          errnoExit("sigwaitinfo()");
+          return FALSE;
         }
         if(signal_info.si_signo==SIG_FCHLD){
           fprintf(stderr,"%s\n","new process failed to be created");
 
           //clean up files if necessary
-          if(embryos->p_stdin!=-1)
-            close(embryos->p_stdin);
-          if(embryos->p_stdout!=-1)
-            close(embryos->p_stdout);
+          if(embryos->p_stdin!=-1){
+            if(close(embryos->p_stdin) == -1)
+              return FALSE;
+          }
+          if(embryos->p_stdout!=-1){
+            if(close(embryos->p_stdout) == -1)
+              return FALSE;
+          }
           return FALSE;
         }
         else if(signal_info.si_signo!= SYNC_SIG){
           kill(pid,SIGKILL);
-          errExit("%s\n","unrecognized synchronize signal");
+          return FALSE;
         }
 
         //clean up files if necessary
-        if(embryos->p_stdin!=-1)
-          close(embryos->p_stdin);
-        if(embryos->p_stdout!=-1)
-          close(embryos->p_stdout);
+        if(embryos->p_stdin!=-1){
+          if(close(embryos->p_stdin) == -1)
+            return FALSE
+        }
+        if(embryos->p_stdout!=-1){
+          if(close(embryos->p_stdout) == -1)
+            return FALSE;
+        }
 
         //initialize process to table
         if(!process_init(pman,embryos->arguments[0],pid,pipe_ends,embryos->background))
@@ -357,7 +360,8 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
         if(!embryos->background){
           foregrounds[num_foregrounds++]=pid;
 
-          setpgid(pid,foreground_group);
+          if(setpgid(pid,foreground_group) == -1)
+            return FALSE;
 
         }
         //put process in background group
@@ -365,25 +369,22 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
           if(*background_group==-1){
             *background_group = pid;
           }
-          setpgid(pid,*background_group);
+          if(setpgid(pid,*background_group) == -1)
+            return FALSE;
         }
 
         if(kill(pid,SYNC_SIG)==-1){
           kill(pid,SIGKILL);
-          errnoExit("kill()");
+          return FALSE;
         }
 
         break;
 
       }
     }
-    signal(SYNC_SIG,SIG_IGN); //clear pending signals
-    signal(SIG_FCHLD,SIG_IGN);
-    signal(SYNC_SIG,SIG_DFL);
-    signal(SIG_FCHLD,SIG_DFL);
   }
 
-
+  process_wait_foreground(pman);
 
 
 

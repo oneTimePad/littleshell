@@ -12,10 +12,12 @@
 
 /**
 * safely determine if ruid has access to this file
+* and open keep it open if necessary
 * file_name: file to check
+* fd_p: if not null, return the fd, else just perform an access check
 * returns: status
 **/
-_BOOL safe_access(const char* file_name, int flags){
+_BOOL safe_access(const char* file_name, int flags,int *fd_p){
   //determine if it exists, by attempting to open for reading
   uid_t saved_euid = geteuid();
   uid_t saved_egid = getegid();
@@ -40,7 +42,10 @@ _BOOL safe_access(const char* file_name, int flags){
   if(flags&A_XOK){
     //can we execute it with this ruid?
     if(ruid==stats.st_uid&&stats.st_mode&S_IXUSR){
-        if(close(fd)==-1){
+        if(fd_p!=NULL){
+          *fd_p = fd;
+        }
+        else if(close(fd)==-1){
           seteuid(saved_euid);
           setegid(saved_egid);
           return FALSE;
@@ -49,7 +54,10 @@ _BOOL safe_access(const char* file_name, int flags){
       }
       //can't, can we execute it with this rgid?
       else if(rgid==stats.st_gid&&stats.st_mode&S_IXGRP){
-        if(close(fd)==-1){
+        if(fd_p!=NULL){
+          *fd_p = fd;
+        }
+        else if(close(fd)==-1){
           seteuid(saved_euid);
           setegid(saved_egid);
           return FALSE;
@@ -58,13 +66,22 @@ _BOOL safe_access(const char* file_name, int flags){
       }
   }
 
+  else{
+    if(fd_p!=NULL){
+      *fd_p = fd;
+    }
+    else
+      return TRUE;
+  }
+
   if(close(fd)==-1){
     seteuid(saved_euid);
     setegid(saved_egid);
     return FALSE;
   }
-  return FALSE; //nope we can't we this file
+  return FALSE; //nope we can't use this file
 }
+
 
 
 
