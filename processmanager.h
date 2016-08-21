@@ -11,9 +11,8 @@
 #ifndef SYNC_SIG
   #define SYNC_SIG SIGUSR1
 #endif
-#ifndef SIG_FCHLD
-  #define SIG_FCHLD SIGRTMIN+7
-#endif
+
+
 
 extern const char * const sys_siglist[];
 typedef enum {FORE , BACK} _GROUND;
@@ -24,7 +23,7 @@ typedef struct _EMBRYO_PROCESS{
   char* arguments[MAX_ARGUMENT];
   int p_stdin;
   int p_stdout;
-  int background;
+  _BOOL background;
 } EMBRYO;
 
 // manages processes
@@ -39,7 +38,6 @@ typedef struct _PMANAGER{
   pid_t foreground_group;
   pid_t background_group;
 
-  int sig_fchl_fd;
 
   //return status of most recent foreground process
   int recent_foreground_status;

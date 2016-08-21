@@ -13,9 +13,11 @@
 /**
 * safely determine if ruid has access to this file
 * and open keep it open if necessary
-* file_name: file to check
-* fd_p: if not null, return the fd, else just perform an access check
-* returns: status
+* filename: file to open or check
+* flags: contains flags for open
+* open flags , S_FOK and S_XOK are all mutually exclusive
+* fd_p: ptr to fd to be returned, ignored, fd_p = S_FOK for file exist check fd_p = S_XOK for execute check
+* returning FALSE doesn't mean something is not true about the file, check errno
 **/
 _BOOL safe_access(const char* file_name, int flags,int *fd_p){
   //determine if it exists, by attempting to open for reading
@@ -25,27 +27,49 @@ _BOOL safe_access(const char* file_name, int flags,int *fd_p){
   uid_t rgid = getgid();
   seteuid(ruid);
   setegid(rgid);
-
+  //if flags is zero fd_p must be S_FOK or S_XOK
+  if(flags == 0 && (fd_p != S_FOK || fd_p != S_XOK)){errno = EINVAL; return FALSE};
+  //if flags is not zero, but fd_p is NULL, no fd is returned
   errno =0;
   int fd;
   //can we open for reading using out ruid/rgid?
-  if((fd=open(file_name,(flags&A_WOK) ? ((flags&A_ROK) ? O_RDWR : O_WRONLY ):O_RDONLY))==-1){
+  if((fd=open(file_name,(flags == 0 )? O_RDONLY : flags)==-1&&(errno!=ACCESS&&fd_p!=S_FOK)){
     seteuid(saved_euid);
     setegid(saved_egid);
     return FALSE;
   }
+  //checking for existence
+  if(fd_p == S_FOK){
+    if(fd!=-1){ //close if fd is open
+      if(close(fd)!=-1){
+        seteuid(saved_euid);
+        setegid(saved_egid);
+        return FALSE;
+      }
+    }
+    seteuid(saved_euid);
+    setegid(saved_egid);
+    //EPERM or no error are mean the file exists
+    return (errno == ACCESS || errno == 0)? TRUE: FALSE;
+  }
+  //are we checking for exist?
 
-  struct stat stats;
-  //use fstat to avoid race condition that would occur with stat
-  if(fstat(fd,&stats)==-1)
-    return FALSE;
-  if(flags&A_XOK){
+
+
+
+
+  //are we checking for executable
+  else if(fd_p == S_XOK){
+    struct stat stats;
+    //use fstat to avoid race condition that would occur with stat
+    if(fstat(fd,&stats)==-1){
+      seteuid(saved_euid);
+      setegid(saved_egid);
+      return FALSE;
+    }
     //can we execute it with this ruid?
     if(ruid==stats.st_uid&&stats.st_mode&S_IXUSR){
-        if(fd_p!=NULL){
-          *fd_p = fd;
-        }
-        else if(close(fd)==-1){
+        if(close(fd)==-1){
           seteuid(saved_euid);
           setegid(saved_egid);
           return FALSE;
@@ -54,32 +78,41 @@ _BOOL safe_access(const char* file_name, int flags,int *fd_p){
       }
       //can't, can we execute it with this rgid?
       else if(rgid==stats.st_gid&&stats.st_mode&S_IXGRP){
-        if(fd_p!=NULL){
-          *fd_p = fd;
-        }
-        else if(close(fd)==-1){
+         if(close(fd)==-1){
           seteuid(saved_euid);
           setegid(saved_egid);
           return FALSE;
         }
         return TRUE;
       }
-  }
 
+      else if(stats.st_mode&S_IXOTH){
+        if(close(fd)==-1){
+         seteuid(saved_euid);
+         setegid(saved_egid);
+         return FALSE;
+       }
+       return TRUE;
+      }
+  }
+  //we didn't check for A_XOR, so return the fd, if user wants it
+  //if it comes here, open succeeded with flags specified
   else{
     if(fd_p!=NULL){
       *fd_p = fd;
     }
-    else
-      return TRUE;
-  }
-
-  if(close(fd)==-1){
+    else{
+      if(close(fd)==-1){
+        seteuid(saved_euid);
+        setegid(saved_egid);
+        return FALSE;
+      }
+    }
     seteuid(saved_euid);
     setegid(saved_egid);
-    return FALSE;
+    return TRUE;
   }
-  return FALSE; //nope we can't use this file
+
 }
 
 

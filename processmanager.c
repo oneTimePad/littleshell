@@ -31,12 +31,14 @@ _BOOL process_manager_init(PMANAGER* pman){
     sigset_t blockset;
     if(sigemptyset(&blockset) == -1)
       errnoExit("sigemptyset()");
-    if(sigaddset(&blockset,SIG_FCHLD)==-1)
+    if(sigaddset(&blockset,FEXEC_SIG)==-1)
       errnoExit("sigaddset()");
-
+    if(sigaddset(&blockset,FINTL_SIG)==-1)
+      errnoExit("sigaddset()");
     if((pman->sig_fchl_fd=signalfd(-1,&blockset,SFD_NONBLOCK | SFD_CLOEXEC)) ==-1)
       errnoExit("signalfd()");
-
+    if(sigdelset(&blockset,FINTL_SIG)==-1)
+      errnoExit("sigdelset()");
     if(sigaddset(&blockset,SYNC_SIG)==-1)
       errnoExit("sigaddset()");
     if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
@@ -114,20 +116,7 @@ void process_reap(PMANAGER *pman){
 
   if(errno != ECHILD && errno !=0)
     errnoExit("waitpid()");
-  struct signalfd_siginfo info;
-  memset(&info,0,sizeof(struct signalfd_siginfo));
-  //look for child processes that failed to start up and exec
-  //these processes signaled RTSIG SIG_FCHLD
-  //poll for pending signals
-  while(read(pman->sig_fchl_fd,&info,sizeof(struct signalfd_siginfo))== sizeof(struct signalfd_siginfo)){
-      if(info.ssi_signo != SIG_FCHLD) errExit("%s\n","unknown error occured while reaping processes"); //never happens
-      int32_t pid = info.ssi_int;
-      int index = process_search(pid);
-      if(index == -1) errExit("%s\n","unknown error occured while reaping processes"); //should never happen
-      fprintf(stderr,"%s:%s\n","Failed to create job",pman->processnames[index]);
-      //the process failed but it did have a process entry, so remove it
-      process_destroy(pman,index);
-  }
+
 }
 
 

@@ -16,7 +16,6 @@
 #define MAX_ENV 50
 
 
-_BOOL isExecutable(char*,char*, size_t,_BOOL* );
 static void process_arguments(char** ,TOKENS* );
 static _BOOL isInPath(char*,char*,size_t);
 _BOOL prepare_process(PMANAGER*,char* ,EMBRYO* ,int, TOKENS*);

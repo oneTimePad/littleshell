@@ -12,16 +12,14 @@
 
 extern char** environ;
 
-
-#define A_FOK 1
-#define A_XOK 2
-#define A_ROK 4
-#define A_WOK 8
+#define S_FOK (int*)-2000;
+#define S_XOK (int*)-1000;
 
 
-//int safe_setenv(const char *,const char *, int);
-//int safe_unsetenv(const char *);
-_BOOL safe_access(const char*, int,int*);
+
+
+
+_BOOL safe_access(const char*, int flags,int*);
 
 
 

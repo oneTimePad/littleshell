@@ -68,21 +68,7 @@ int main(){
           errnoExit("internal_command()");
       }
 
-      //if token is an an executable
-      if(isExecutable(str,file_full_path,PATH_LIM,&in_path)){
-        //fetch the background gpid
-        int backgpid = -1;
-        pthread_mutex_lock(&pman->mutex);
-        backgpid = pman->background_group;
-        pthread_mutex_unlock(&pman->mutex);
 
-        execute(pman,((in_path) ? file_full_path : str),curr_tkn,pman->foreground_group,&backgpid);
-        //edit it since it might have been -1 before
-        pthread_mutex_lock(&pman->mutex);
-        pman->background_group = backgpid;
-        pthread_mutex_unlock(&pman->mutex);
-        continue;
-      }
       //unrecognized token
       else
         printf("%s: command not found\n",str);

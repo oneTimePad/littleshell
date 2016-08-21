@@ -14,48 +14,92 @@ static char* stripNewlines(char* str){
   int strl = strlen(str);
   if(*(str+strl-1)!=0xa)return str;
 
-  char* newStr = (char*)malloc(strl-1);
+  char* newStr =
+  if((newStr =(char*)malloc(strl-1)) == NULL)
+    return NULL;
   strncpy(newStr,str,strl);
-  *(newStr+(strl-1))=NULL_TERM;
+  *(newStr+(strl-1))='\0';
   //free(str);
   return newStr;
 }
 
 /**
 *splits string based on delimeter
-*output: array to contain TOKENS
-*input: string from stdin
-*delimeter: character to split strings
-*return:number of strings parsed
+*output: split fills this array with an strings separated by '\0',first string is always '\0'
+* might contain an extra '\0' that is ignored
 **/
-static int split(char* output[],char* input,int delimiter){
+static int split(char* output,size_t max, char* input){
     input = stripNewlines(input);
-    if(output==NULL)return 0;
-    int start=-1;
-    int end=0;
-    int string_index=-1;
-
-    while(1){
-
-        char curr_c = *(input+end);
-        if((curr_c ==delimiter || curr_c==NULL_TERM)&& start!=-1){
-          string_index++;
-          output[string_index] = (char*)malloc(end-start+1);
-          //copy extracted token
-          strncpy(output[string_index],input+start,end-start);
-          *(output[string_index]+end-start) =NULL_TERM;
-          start=-1;
-
+    if(output==NULL || input == NULL)return 0;
+    int index =0;
+    int num_commands =0;
+    while(*input!='\0'){
+      switch (*input) {
+        case '<':{
+          //bounds check: increase by 10 if needed so we can reduce the number of reallocs
+          output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+          //since there are 2 characters added to output here, we can safely increase output by 10 char's with no overflow
+          output[index++] = '\0';
+          if(*(input+1) == '<'){output[index++] = RDR_SIN_A; input++;}
+          else  {output[index++] = RDR_SIN;}
+          output[index++] = '\0';
+          input++;
+          num_commands++;
+          break;
         }
-        else if(start==-1&&curr_c!=delimiter){
-          start=end;
+        case '>':{
+          output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+          output[index++] = '\0';
+          if(*(input+1) == '>'){output[index++] = RDR_SOT_A; input++;)
+          else {output[index++] = RDR_SOT;}
+          output[index++] = '\0';
+          input++;
+          num_commands++
+          break;
         }
-        end++;
-        if(curr_c==NULL_TERM){
-          output[string_index+1] = NULL;
-          return (string_index+1);
+        case '&':{
+          output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+          output[index++] = '\0';
+          if(*(input+1) == '&') {output[index++] = ANDIN; input++;}
+          else {output[index++] = BACK_GR;}
+          output[index++] = '\0';
+          input++;
+          num_commands++;
+          break;
         }
+        case '|':{
+          output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+          output[index++] = '\0';
+          output[index++] = PIPE;
+          output[index++] = '\0';
+          input++;
+          num_commands++;
+          break;
+        }
+        case ' ':{
+          if(num_commands!=0&&output[index-1]!='\0'&&output[index-1]!=' '){
+            //since one char is added below, we can safely increase output by 10 with no overflow
+            output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+            output[index++]='\0';
+          }
+          input++;
+          break;
+        }
+        default:{
+          if((num_commands!=0&&output[index-1]=='\0') || num_commands ==0){num_commands++;}
+          //since one char is added below we can safely increase output by 10 with no overflow
+          output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+          output[index++] =input;
+          break;
+        }
+      }
     }
+  }
+    //edge case
+    output = (index>=max)? realloc(output,(max+=10)*sizeof(char)) : output;
+    output[index++] = '\0';
+    return num_commands;
+
 
 }
 
@@ -66,20 +110,24 @@ static int split(char* output[],char* input,int delimiter){
 * input: string from user
 * size: length of that input
 **/
-_BOOL initializeTokens(TOKENS** tkn,char * input,int size){
+_BOOL initializeTokens(TOKENS* tkn,char * input,int size){
   if(size<=1) return FALSE;
   //allocate token struct
   //safety cap: the max number of tokens is the length of the user's string
   //this is safe since string is null-terminated
-  *tkn = (TOKENS*)malloc(sizeof(TOKENS)+size*(sizeof(char*)));
-  (*tkn)->cmd_tokens = (char**)((*tkn)+1);
-  int parsed_len =0;
-  if((parsed_len = split((*tkn)->cmd_tokens,input,SPACE)) ==0){
-    free(*tkn);
+  size_t alloc_size = BUFFER*size*(sizeof(char);
+  if((tkn->cmd_tokens = (char*)malloc(alloc_size*sizeof(char))) == NULL)
+    return FALSE;
+
+  int num_commands =0;
+  if((num_commands = split(tkn->cmd_tokens,alloc_size,input)) ==0){
+    free(tkn->cmd_tokens);
     return FALSE;
   }
-  (*tkn)->num_commands=parsed_len;
-  (*tkn)->current_command=-1;
+  tkn->num_commands=num_commands;
+  tkn->current_command=-1;
+  tkn->cmd_index = tkn->cmd_tokens;
+
   return TRUE;
 }
 /**
@@ -87,28 +135,24 @@ _BOOL initializeTokens(TOKENS** tkn,char * input,int size){
 * tkn: ptr to token struct
 **/
 void destroyTokens(TOKENS* tkn){
-  char** cmds = tkn->cmd_tokens;
-  for(;*cmds!=NULL;cmds++) free(*cmds);
-  //free(tkn);
+  free(tkn->cmd_tokens);
+}
 
-}
-/**
-* look at the next token but don't update
-* tkn: ptr to token struct
-* returns: token string
-**/
-char* testTokenNextCommand(TOKENS* tkn){
-  int next = tkn->current_command+1;
-  if( next== tkn->num_commands)return NULL;
-  return tkn->cmd_tokens[next];
-}
 /**
 *fetch next token and update
 * tkn: ptr to token struct
 * returns: token string
 **/
-char* getTokenNextCommand(TOKENS* tkn){
-  char* ret = testTokenNextCommand(tkn);
-  tkn->current_command++;
-  return ret;
+char* getToken(TOKENS* tkn,int status){
+  if(status == CURR_TOKEN)
+    return tkn->cmd_index
+  else if(status ==NEXT_TOKEN){
+    if(tkn->num_commands == tkn->current_command) return NULL;
+      tkn->cmd_index = tkn->cmd_index+strlen(tkn->cmd_index)+1;
+      tkn->current_command++;
+      return tkn->cmd_index;
+  }
+  else {
+    return NULL;
+  }
 }

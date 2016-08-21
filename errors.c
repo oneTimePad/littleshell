@@ -19,11 +19,9 @@ inline void errnoExit(const char* fct_name){
 * used for a new child process to signal its parent of failure
 * fct_name: func that caused the error
 **/
-inline void chldExit(const char* fct_name){
+inline void chldExit(){
   union sigval val;
-  val.sival_int = getpid();
-  if(errno!=0)
-    perror(fct_name);
+  val.sival_int = errno;
   if(sigqueue(getppid(),SIG_FCHLD,&val)==-1)
       _exit(EXIT_FAILURE); // all hell breaks lose
   _exit(EXIT_FAILURE);

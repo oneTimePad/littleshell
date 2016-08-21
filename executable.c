@@ -5,38 +5,9 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
-#include "utils.h"
 #include "executable.h"
 
 #define PATH "LPATH"
-
-/**
-* determines if the string points to an executable file
-* cmd: token to test
-* fpath: if it is in the path, we needs it's full path, returns full path
-* size: size of fpath
-* returns: whether it is an executable
-**/
-_BOOL isExecutable(char* cmd,char* fpath, size_t size,_BOOL* in_path){
-  if(in_path==NULL || fpath== NULL){
-    errno = EINVAL;
-    return FALSE;
-  }
-  if(safe_access(cmd,A_XOK)){
-     *in_path = FALSE;
-     return TRUE; //if it specifed by absolute path
-   }
-  if(errno != ENOENT && errno!=0) return FALSE;
-
-  if(isInPath(cmd,fpath,size)){
-    *in_path = TRUE;
-    return TRUE; //if it is located in PATH
-  }
-  return FALSE;
-}
-
-
-
 
 /**
 * checks if file is in `path` and can be executed
@@ -85,19 +56,7 @@ _BOOL isInPath(char *file,char* fpath,size_t size){
   return TRUE;
 }
 
-/**
-* determine if the string is a meta symbol
-* cmd: string to check for meta symbols
-* returns: status
-**/
-_BOOL isMetaSymbol(char* cmd){
-  char* symbols[] = {"|","<",">","<<",">>","&","&&",NULL};
-  char** tmp_p = symbols;
-  for(;*tmp_p!=NULL;tmp_p++)
-    if(strcmp(*tmp_p,cmd)==0)return TRUE;
 
-  return FALSE;
-}
 
 /**
 *extracts arguments for executable
@@ -216,7 +175,7 @@ _BOOL execute(PMANAGER* pman, char* cmd, TOKENS* tkns,int foreground_group,int* 
     char* second_prog ="";
     char full_path[PATH_LIM];
     _BOOL in_path;
-    if((second_prog=testTokenNextCommand(tkns))==NULL || ! isExecutable(second_prog,full_path,PATH_LIM,&in_path)){
+    if((second_prog=testTokenNextCommand(tkns))==NULL){
       return FALSE;
     }
     second_prog = (in_path) ? full_path : second_prog;
