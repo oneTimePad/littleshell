@@ -12,10 +12,26 @@ _BOOL inInternal(char *str){
   return FALSE;
 }
 
+
 /**
 Managers process data structure creation and clean up
 **/
-
+static _BOOL isSensitive(char *str){
+  switch (*str) {
+    case PIPE:
+    case RDR_SOT:
+    case RDR_SOT_A:
+    case RDR_SIN:
+    case RDR_SIN_A:
+    case BACK_GR:
+    case ANDIN:
+      return TRUE;
+      break;
+    default:
+      return FALSE;
+      break;
+  }
+}
 /*
 * cleans up embryos
 * procs: list of embryos created
@@ -90,6 +106,12 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           }
           //possibly go back to shell to wait for file
           if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = RDR_SIN;errno = 0; return FALSE;}
+          if(isSensitive(cur_tkn)){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
           int fd;
           if((fd = open(cur_tkn,O_RDONLY))==-1){return FALSE;}
           procs[info->cur_proc].p_stdin = fd;
@@ -110,6 +132,12 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           char *rdr = cur_tkn;
           //possibly go back to shell to wait for file
           if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence =*rdr; errno = 0; return FALSE;}
+          if(isSensitive(cur_tkn)){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
           int fd;
           if((fd = open(cur_tkn,O_WRONLY | (RDR_SOT_A == *rdr) ? O_APPEND : 0 ))==-1){return FALSE;}
           procs[info->cur_proc].p_stdout = fd;
@@ -129,15 +157,18 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         case ANDIN:{
-          if(info->cur_proc == -1 ){
+          info->fork_seq++;
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = ANDIN; errno =0; return FALSE;}
+          if(info->cur_proc == -1 || isSensitive(cur_tkn) ){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
             return FALSE;
           }
           //increase the fork sequence(i.e next process will be startd in a separate fork sequence)
-          info->fork_seq++;
-          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = ANDIN; errno =0; return FALSE;}
+
+
+
           which = CURR_TOKEN;
           break;
         }
@@ -172,18 +203,11 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           char * args = new_proc->arguments;
           which = NEXT_TOKEN;
           while(!end &&(cur_tkn = getToken(tkns,which))!= NULL){
-            switch (*cur_tkn) {
-              case PIPE:
-              case RDR_SIN:
-              case RDR_SIN_A:
-              case RDR_SOT:
-              case RDR_SOT_A:
-              case BACK_GR:
-              case ANDIN: //end search for arguments
-                end = TRUE;
-                which = CURR_TOKEN;
-                break;
-              default: // process arguments
+            if (isSensitive(cur_tkn)) { //end search
+              end = TRUE;
+              which = CURR_TOKEN;
+            }  //process args
+            else{
                 if(args_cnt < MAX_ARGUMENT && strlen(cur_tkn)+1<MAX_ARG_LEN){strcpy(args,cur_tkn);}
                 else{
                   info->cur_proc-=1;
