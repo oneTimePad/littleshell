@@ -56,19 +56,8 @@ int main(){
       continue;
     }
 
-    char file_full_path[PATH_LIM];
-    _BOOL in_path;
-    int which;
-    char * str;
-    for(which=CURR_TOKEN; (str=getToken(&tkns,which))!=NULL; which=NEXT_TOKEN){
+    execute(pman,tkns);
 
-      //if token is an internal command
-      /*short key;
-      if((key=isInternalCommand(str))!=NONE){
-        if(!internal_command(key,pman,&curr_tkn))
-          errnoExit("internal_command()");
-      }*/
-    }
 
     //clean up
 

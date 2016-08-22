@@ -37,7 +37,7 @@ typedef struct _PMANAGER{
   //process group ids
   pid_t foreground_group;
   pid_t background_group;
-
+  int fork_sequence;
 
   //return status of most recent foreground process
   int recent_foreground_status;
