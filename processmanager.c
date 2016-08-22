@@ -76,6 +76,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           info->pipe_present = TRUE;
           procs[info->cur_proc].my_pipe_other = pipes[0]; //store the other end
           if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = PIPE; errno =0; return FALSE;}
+
           which = CURR_TOKEN;
           break;
         }
@@ -116,7 +117,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         case BACK_GR:{
-          if(info->cur_proc == -1){
+          if(info->cur_proc == -1 || info->pipe_present){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -128,7 +129,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         case ANDIN:{
-          if(info->cur_proc == -1){
+          if(info->cur_proc == -1 ){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
