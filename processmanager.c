@@ -79,7 +79,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
       switch (*cur_tkn) {
         case PIPE:{
           //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
-          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdout!=-1 || info->pipe_present || *procs[info->cur_proc].background){
+          if(info->cur_proc == -1 || info->continuing || procs[info->cur_proc].p_stdout!=-1 || info->pipe_present || *procs[info->cur_proc].background){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -98,7 +98,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
         }
         case RDR_SIN:{
           //pipeline must not be open to stdin of this proc or if rdr to stdin was already done-> invalid (i.e. proc1 | proc2 < file or proc1 < file1 < file2 is invalid)
-          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdin!=-1){
+          if(info->cur_proc == -1 || info->continuing || procs[info->cur_proc].p_stdin!=-1){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -123,7 +123,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
         case RDR_SOT:
         case RDR_SOT_A:{
           //pipeline must not be open to stdout of this proc or if rdr to stdout has already be done->invalid (i.e proc1 | > file proc2 or proc1 > file1 > file2 is invalid)
-          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdout!=-1){
+          if(info->cur_proc == -1 || info->continuing || procs[info->cur_proc].p_stdout!=-1){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -145,7 +145,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         case BACK_GR:{
-          if(info->cur_proc == -1 || info->pipe_present){
+          if(info->cur_proc == -1|| info->continuing || info->pipe_present){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -157,16 +157,22 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         case ANDIN:{
-          info->fork_seq++;
-          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = ANDIN; errno =0; return FALSE;}
-          if(info->cur_proc == -1 || isSensitive(cur_tkn) ){
+
+          if(info->cur_proc == -1 || info->continuing ){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
             return FALSE;
           }
+          info->fork_seq++;
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = ANDIN; errno =0; return FALSE;}
           //increase the fork sequence(i.e next process will be startd in a separate fork sequence)
-
+          if(isSensitive(cur_tkn)){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
 
 
           which = CURR_TOKEN;
@@ -248,6 +254,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
       }
+      info->continuing = FALSE;
   }
 
   return TRUE;

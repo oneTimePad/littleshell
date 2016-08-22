@@ -28,6 +28,7 @@ typedef struct _EMBRYO_PROCESS{
   int my_pipe_other;
   _BOOL *background;
   _BOOL internal_command;
+
 } EMBRYO;
 
 typedef struct _EMBRYO_INFO{
@@ -35,6 +36,7 @@ typedef struct _EMBRYO_INFO{
   _BOOL pipe_present;
   int fork_seq;
   char last_sequence;
+  _BOOL continuing;
 } EMBRYO_INFO;
 
 // manages processes (forked processes)
