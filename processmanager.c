@@ -63,7 +63,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
       switch (*cur_tkn) {
         case PIPE:{
           //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
-          if(info->cur_proc == -1 || info->pipe_present || *procs[info->cur_proc].background){
+          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdout!=-1 || info->pipe_present || *procs[info->cur_proc].background){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -92,7 +92,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           int fd;
           if((fd = open(cur_tkn,O_RDONLY))==-1){return FALSE;}
           procs[info->cur_proc].p_stdin = fd;
-          which = CURR_TOKEN;
+          which = NEXT_TOKEN;
           break;
         }
         case RDR_SIN_A:
@@ -112,7 +112,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           int fd;
           if((fd = open(cur_tkn,O_WRONLY | (RDR_SOT_A == *rdr) ? O_APPEND : 0 ))==-1){return FALSE;}
           procs[info->cur_proc].p_stdout = fd;
-          which = CURR_TOKEN;
+          which = NEXT_TOKEN;
           break;
         }
         case BACK_GR:{
@@ -169,7 +169,8 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           //search for aguments for new process
           _BOOL end = FALSE;
           char * args = new_proc->arguments;
-          while((cur_tkn = getToken(tkns,NEXT_TOKEN))!= NULL && !end){
+          which = NEXT_TOKEN;
+          while(!end &&(cur_tkn = getToken(tkns,which))!= NULL){
             switch (*cur_tkn) {
               case PIPE:
               case RDR_SIN:
@@ -218,6 +219,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
             *new_proc->background = FALSE;
           }
           new_proc->p_stdout = -1;
+
           break;
         }
       }
