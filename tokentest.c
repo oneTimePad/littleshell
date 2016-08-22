@@ -52,6 +52,7 @@ main(int argc,char *argv[]){
 
   }
 
+  destroyTokens(&tkns);
 
 
 

@@ -7,55 +7,6 @@
 #include <errno.h>
 #include "executable.h"
 
-#define PATH "LPATH"
-
-/**
-* checks if file is in `path` and can be executed
-* file: file to check
-* fpath: buffer to hold location of file
-* size : size of fpath
-* returns: status
-**/
-_BOOL isInPath(char *file,char* fpath,size_t size){
-  char full_path[PATH_LIM];
-  char * path_var;
-
-  #ifdef _GNU_SOURCE
-  if((path_var=secure_getenv(PATH))==NULL)
-    return FALSE;
-  #else
-  if((path_var=getenv(PATH))==NULL)
-    return FALSE;
-  #endif
-
-  int cur_index =0;
-  _BOOL found = FALSE;
-  //search all files in path
-
-  for(;;path_var++){
-    if(*path_var==':' || *path_var=='\0'){
-      full_path[cur_index]= '\0';
-      cur_index = 0;
-      strcat(full_path,file);
-      //test if executable
-      if(safe_access(full_path,A_XOK))
-        break;
-      if(*path_var=='\0')
-        return FALSE;
-    }
-    full_path[cur_index++] = *path_var;
-
-  }
-
-  if(strlen(full_path)+1>size){
-    errno = ENOMEM;
-    return FALSE;
-  }
-
-  strcpy(fpath,full_path);
-  return TRUE;
-}
-
 
 
 /**

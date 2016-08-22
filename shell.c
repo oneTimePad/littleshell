@@ -24,7 +24,6 @@ void term_handler(int sig){
     term_signal = 1;
 }
 
-static char LPATH[] = "LPATH=./bin/:";
 
 
 int main(){
@@ -33,8 +32,9 @@ int main(){
 
 //main loop
   while(1){
-    if(term_signal)
+    if(term_signal){
       shell_exit(pman,NULL);
+    }
 
     //read use input to shell
 
@@ -43,7 +43,7 @@ int main(){
     printf("%s",shell_name);
     fflush(stdout);
     ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
-    TOKENS* curr_tkn;
+    TOKENS curr_tkn;
 
     process_reap(pman);
 
@@ -58,27 +58,21 @@ int main(){
 
     char file_full_path[PATH_LIM];
     _BOOL in_path;
+    int which;
     char * str;
-    while((str=getTokenNextCommand(curr_tkn))!=NULL){
+    for(which=CURR_TOKEN; (str=getToken(&tkns,which))!=NULL; which=NEXT_TOKEN){
 
       //if token is an internal command
-      short key;
+      /*short key;
       if((key=isInternalCommand(str))!=NONE){
-        if(!internal_command(key,pman,str,curr_tkn))
+        if(!internal_command(key,pman,&curr_tkn))
           errnoExit("internal_command()");
-      }
-
-
-      //unrecognized token
-      else
-        printf("%s: command not found\n",str);
-
-
+      }*/
     }
 
     //clean up
 
-    destroyTokens(curr_tkn);
+    destroyTokens(&curr_tkn);
     process_reap(pman);
   }
 

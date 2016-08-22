@@ -26,7 +26,7 @@ static char* stripNewlines(char* str){
 
 /**
 *splits string based on delimeter
-*output: split fills this array with an strings separated by '\0',first string is always '\0'
+*output: split fills this array with an strings separated by '\0'
 * might contain an extra '\0' that is ignored
 **/
 static int split(char* output,size_t max, char* input){
@@ -126,7 +126,7 @@ _BOOL initializeTokens(TOKENS* tkn,char * input,int size){
     return FALSE;
   }
   tkn->num_commands=num_commands;
-  tkn->current_command=-1;
+  tkn->current_command=1;
   tkn->cmd_index = tkn->cmd_tokens;
 
   return TRUE;
@@ -144,11 +144,11 @@ void destroyTokens(TOKENS* tkn){
 * tkn: ptr to token struct
 * returns: token string
 **/
-char* getToken(TOKENS* tkn,int status){
-  if(status == CURR_TOKEN){
+char* getToken(TOKENS* tkn,int which){
+  if(which == CURR_TOKEN){
     return tkn->cmd_index;
   }
-  else if(status ==NEXT_TOKEN){
+  else if(which ==NEXT_TOKEN){
     if(tkn->num_commands == tkn->current_command) return NULL;
       tkn->cmd_index = tkn->cmd_index+strlen(tkn->cmd_index)+1;
       tkn->current_command++;
