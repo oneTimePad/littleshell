@@ -100,52 +100,8 @@ _BOOL prepare_process(PMANAGER* pman,char* process_name,EMBRYO* proc,int pipe_st
 
 
 
-_BOOL execute(PMANAGER *pman, TOKENS *tkns){
-
-  EMBRYO proc[MAX_PROCESSES];
-  char *cur_tkn;
-  int which = CURR_TOKEN;
-  int cur_proc = -1;
-  volatile _BOOL incr_fork_seq = FALSE;
-  volatile _BOOL pipe_present  = FALSE;
-  int pipes[2];
-  while((cur_tkn = getToken(cur_tkn,which))!=NULL){
-      switch (cur_tkn) {
-        case PIPE:
-          if(cur_proc == -1 || pipe_present){errno = EINVAL; return FALSE;}
-          if(pipe(pipes) == -1)
-            return FALSE;
-          proc[cur_proc].p_stdout = pipes[1];
-          pipe_present = TRUE;
-          which = NEXT_TOKEN;
-          break;
-        case RDR_SIN:
-          if(cur_proc == -1 || proc[cur_proc].p_stdin){errno = EINVAL; return FALSE;}
-          if((cur_tkn = getToken[cur_tkn,NEXT_TOKEN]) == NULL){errno = 0; return FALSE;}
-          int fd;
-          if((fd = open(cur_tkn,O_RDONLY))==-1){return FALSE;}
-          proc[cur_proc].p_stdin = fd;
-          break;
-        case RDR_SOT:
-          if(cur_proc == -1){errno = EINVAL; return FALSE;}
-          break;
-        case RDR_SOT_A:
-          if(cur_proc == -1){errno = EINVAL; return FALSE;}
-          break;
-        case BACK_GR:
-          if(cur_proc == -1){errno = EINVAL; return FALSE;}
-          break;
-        case ANDIN:
-          if(cur_proc == -1){errno = EINVAL; return FALSE;}
-          incr_fork_seq = TRUE;
-          break;
-        default:
-          break;
-      }
-  }
 
 
-}
 
 
 

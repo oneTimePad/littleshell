@@ -1,16 +1,230 @@
-#include "processmanager.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <fcntl.h>
+#include "tokenizer.h"
+#include "processmanager.h"
+
+_BOOL inInternal(char *str){
+  return FALSE;
+}
 
 /**
 Managers process data structure creation and clean up
 **/
 
+/*
+* cleans up embryos
+* procs: list of embryos created
+* info: info struct about the embryos created
+*/
+_BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
+  if(info->cur_proc == -1)return TRUE;
+  if(info->pipe_present && procs[info->cur_proc-1].my_pipe_other!=-1){
+    if(close(procs[info->cur_proc].my_pipe_other)==-1)
+      return FALSE;
+    procs[info->cur_proc].p_stdout=-1;
+  }
+  int num_procs = info->cur_proc+1;
+  int index = 0;
 
+  for(;index < num_procs;index++){
+    if(index ==0 || (index!=0 && procs[index-1].fork_seq !=procs[index].fork_seq)){
+      free(procs[index].background);
+    }
+    if(procs[index].p_stdout!=-1 && procs[index].my_pipe_other==-1){
+      if(close(procs[index].p_stdout) == -1)
+        return FALSE;
+    }
+    if(procs[index].p_stdin!=-1){
+      if(close(procs[index].p_stdin) == -1)
+        return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**
+* attempts to form processes and their i/o connections from tkns
+* tkns: ptr to the TOKENS
+* procs: ptr to EMBRYO structs
+* info: contains information about where to start( i.e to be used if we are continuing from a previous call to embryos_init)
+* returns: status, return FALSE and errno is set to EINVAL for bad syntax or 0 if we don't have enough info (i.e go back to shell)
+**/
+_BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
+  if(info == NULL | tkns == NULL || procs == NULL) {errno = EFAULT; return FALSE;}
+  char *cur_tkn;
+  int which = CURR_TOKEN;
+  int pipes[2];
+  while((cur_tkn = getToken(tkns,which))!=NULL){
+      switch (*cur_tkn) {
+        case PIPE:{
+          //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
+          if(info->cur_proc == -1 || info->pipe_present || *procs[info->cur_proc].background){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
+          if(pipe(pipes) == -1)
+            return FALSE;
+          //start pipeline
+          procs[info->cur_proc].p_stdout = pipes[1];
+          info->pipe_present = TRUE;
+          procs[info->cur_proc].my_pipe_other = pipes[0]; //store the other end
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = PIPE; errno =0; return FALSE;}
+          which = CURR_TOKEN;
+          break;
+        }
+        case RDR_SIN:{
+          //pipeline must not be open to stdin of this proc or if rdr to stdin was already done-> invalid (i.e. proc1 | proc2 < file or proc1 < file1 < file2 is invalid)
+          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdin!=-1){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
+          //possibly go back to shell to wait for file
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = RDR_SIN;errno = 0; return FALSE;}
+          int fd;
+          if((fd = open(cur_tkn,O_RDONLY))==-1){return FALSE;}
+          procs[info->cur_proc].p_stdin = fd;
+          which = CURR_TOKEN;
+          break;
+        }
+        case RDR_SIN_A:
+          break;
+        case RDR_SOT:
+        case RDR_SOT_A:{
+          //pipeline must not be open to stdout of this proc or if rdr to stdout has already be done->invalid (i.e proc1 | > file proc2 or proc1 > file1 > file2 is invalid)
+          if(info->cur_proc == -1 || procs[info->cur_proc].p_stdout!=-1){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
+          char *rdr = cur_tkn;
+          //possibly go back to shell to wait for file
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence =*rdr; errno = 0; return FALSE;}
+          int fd;
+          if((fd = open(cur_tkn,O_WRONLY | (RDR_SOT_A == *rdr) ? O_APPEND : 0 ))==-1){return FALSE;}
+          procs[info->cur_proc].p_stdout = fd;
+          which = CURR_TOKEN;
+          break;
+        }
+        case BACK_GR:{
+          if(info->cur_proc == -1){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
+          //set all processes in pipe to background
+          *procs[info->cur_proc].background = TRUE;
+          which = NEXT_TOKEN;
+          break;
+        }
+        case ANDIN:{
+          if(info->cur_proc == -1){
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+          }
+          //increase the fork sequence(i.e next process will be startd in a separate fork sequence)
+          info->fork_seq++;
+          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = ANDIN; errno =0; return FALSE;}
+          which = CURR_TOKEN;
+          break;
+        }
+        default:{ //create the process embryo entry
+          EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
+          new_proc->fork_seq = info->fork_seq; //set the fork sequence
+          new_proc->internal_command = FALSE;
+          //attempt to get the process name and check if it is in the path if necessary
+          if(strlen(cur_tkn)+1>PATH_LIM){
+            info->cur_proc-=1;
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = ENOMEM;
+            return FALSE;
+          }
+          if(((strstr(cur_tkn,"/")!= NULL) ? strcpy(new_proc->program,cur_tkn) :( (inPath(cur_tkn,new_proc->program,PATH_LIM)&& !inInternal(cur_tkn)) ? new_proc->program : NULL) ) ==NULL){
+            //it might be a command internal to the shell
+            if(inInternal(cur_tkn)){
+              new_proc->internal_command = TRUE;
+            }
+            else{
+                info->cur_proc-=1;
+                if(!embryo_clean(procs,info))
+                  return FALSE;
+                errno = ENOENT;
+                return FALSE;
+              }
+          }
+          int args_cnt = 0;
+          //search for aguments for new process
+          _BOOL end = FALSE;
+          char * args = new_proc->arguments;
+          while((cur_tkn = getToken(tkns,NEXT_TOKEN))!= NULL && !end){
+            switch (*cur_tkn) {
+              case PIPE:
+              case RDR_SIN:
+              case RDR_SIN_A:
+              case RDR_SOT:
+              case RDR_SOT_A:
+              case BACK_GR:
+              case ANDIN: //end search for arguments
+                end = TRUE;
+                which = CURR_TOKEN;
+                break;
+              default: // process arguments
+                if(args_cnt < MAX_ARGUMENT && strlen(cur_tkn)+1<MAX_ARG_LEN){strcpy(args,cur_tkn);}
+                else{
+                  info->cur_proc-=1;
+                  if(!embryo_clean(procs,info))
+                    return FALSE;
+                  errno = ENOMEM;
+                  return FALSE;
+                }
+                args = args + strlen(args)+1;
+                break;
+            }
+          }
+          new_proc->my_pipe_other = -1;
+          new_proc->p_stdin = -1;
+          //if a pipe is present and the current proc's fork seq matches the fork seq of the previous proc in the pipe
+          if(info->pipe_present && new_proc->fork_seq == procs[info->cur_proc-1].fork_seq){
+            new_proc->p_stdin = procs[info->cur_proc-1].my_pipe_other;
+            //the last process in pipe which determine the background--ptr them all to the same _BOOL
+            new_proc->background = procs[info->cur_proc-1].background;
+            info->pipe_present = FALSE;
+          }
+          //fork seq's don't match but pipe is present( i.e  proc1 && | proc2 occured which is invalid)
+          else if(info->pipe_present){
+            info->cur_proc-=1;
+            if(!embryo_clean(procs,info))
+              return FALSE;
+            errno = EINVAL;
+            return FALSE;
+
+          }
+          //else no pipe is present
+          else{
+            new_proc->background = (_BOOL *)malloc(sizeof(_BOOL));
+            *new_proc->background = FALSE;
+          }
+          new_proc->p_stdout = -1;
+          break;
+        }
+      }
+  }
+
+  return TRUE;
+}
 
 
 /**
@@ -18,6 +232,7 @@ Managers process data structure creation and clean up
 * pman: ptr to process manager structure
 * returns: status of success
 **/
+/*
 _BOOL process_manager_init(PMANAGER* pman){
     if(pman == NULL) return FALSE;
     int i =0;
@@ -51,6 +266,7 @@ _BOOL process_manager_init(PMANAGER* pman){
 
     return TRUE;
 }
+*/
 
 
 /**
@@ -61,6 +277,7 @@ _BOOL process_manager_init(PMANAGER* pman){
 * ground: process is fore or background
 * returns: status of success
 **/
+/*
 _BOOL process_init(PMANAGER* pman,char* name,pid_t pid){
 
   //look for unused process entry
@@ -79,12 +296,13 @@ _BOOL process_init(PMANAGER* pman,char* name,pid_t pid){
 
 
   return TRUE;
-}
+}*/
 
 /**
 * get the index of process with pid job
 * returns index on success, -1 on error
 **/
+/*
 int process_search(pid_t job){
   int i =0;
   while(i++<MAX_PROCESSES&&pman->processpids[i]!=job);
@@ -100,11 +318,12 @@ void process_wait_foreground(PMANAGER *pman){
   while((job = waitpid(-1*pman->foreground_group,&status,WUNTRACED))!=-1)
     process_status(pman,job,status,FALSE);
 }
-
+*/
 /**
 * looks for process status changes and failures
 * pman: ptr to process manager
 **/
+/*
 void process_reap(PMANAGER *pman){
   int status;
   pid_t job;
@@ -164,7 +383,7 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
 
 
 }
-
+*/
 
 /**
 * moves job to the foreground
@@ -172,6 +391,7 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
 * job: process id of job to move to foreground
 * returns: status
 **/
+/*
 _BOOL process_foreground(PMANAGER* pman,pid_t job){
   int index = process_search(job);
   if(index == -1) return FALSE;
@@ -197,7 +417,7 @@ _BOOL process_foreground(PMANAGER* pman,pid_t job){
   process_wait_foreground(pman);
 
   return TRUE;
-}
+}*/
 
 
 /**
@@ -205,6 +425,7 @@ _BOOL process_foreground(PMANAGER* pman,pid_t job){
 * pman: ptr to process manager
 * job: process id of job
 **/
+/*
 _BOOL process_background(PMANAGER* pman, pid_t job){
 
   int index = process_search(job);
@@ -223,35 +444,34 @@ _BOOL process_background(PMANAGER* pman, pid_t job){
     return FALSE;
 
   return TRUE;
-}
+}*/
 
 /**
 * clean up process entry on death
 * pman: ptr to process manager
 * proc_index: index in process table
 **/
+/*
 static void process_destroy(PMANAGER* pman,int proc_index){
 
   memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
   pman->processpids[proc_index] = -1;
 }
-
+*/
 
 /**
 * prints out a list of active processes
 * pman: ptr to process manager
 **/
+/*
 void process_dump(PMANAGER* pman){
 
-  pthread_mutex_lock(&pman->mutex);
   int i = 0;
-  pthread_mutex_lock(&stdout_lock);
   for(;i<MAX_PROCESSES;i++)
     if(pman->processpids[i]!=-1 && pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s SUSPENDED\n",pman->processpids[i],pman->processnames[i]);
     else if(pman->processpids[i]!=-1 && !pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s RUNNING\n",pman->processpids[i],pman->processnames[i]);
 
-  pthread_mutex_unlock(&stdout_lock);
-  pthread_mutex_unlock(&pman->mutex);
-}
+
+}*/
