@@ -22,6 +22,7 @@ typedef enum {FORE , BACK} _GROUND;
 typedef struct _EMBRYO_PROCESS{
   char  program[PATH_LIM];
   char  arguments[MAX_ARGUMENT*MAX_ARG_LEN];
+  int   num_args;
   int p_stdin;
   int p_stdout;
   int fork_seq;
@@ -51,7 +52,6 @@ typedef struct _PMANAGER{
   pid_t foreground_group;
   pid_t background_group;
 
-
   //return status of most recent foreground process
   int recent_foreground_status;
 
@@ -62,8 +62,11 @@ _BOOL embryo_init(TOKENS *,EMBRYO *, EMBRYO_INFO *);
 _BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
 
 //used for forked processes
+
+_BOOL processes_init(PMANAGER *,EMBRYO *,size_t);
+_BOOL process_init(PMANAGER *,EMBRYO *,pid_t);
+
 _BOOL process_manager_init(PMANAGER *);
-_BOOL process_init(PMANAGER *,char*,pid_t, int*, int);
 void process_destroy(PMANAGER *,int);
 int process_search(pid_t);
 void process_wait_foreground(PMANAGER *);

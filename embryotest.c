@@ -29,6 +29,7 @@ main(int argc,char *argv[]){
   info.fork_seq = 0;
   info.last_sequence = '\0';
   info.pipe_present = FALSE;
+  info.continuing = FALSE;
   if(!embryo_init(&tkns,embryos,&info))
     printf("failed\n");
   exit(EXIT_SUCCESS);

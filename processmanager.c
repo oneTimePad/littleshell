@@ -208,6 +208,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           _BOOL end = FALSE;
           char * args = new_proc->arguments;
           which = NEXT_TOKEN;
+          new_proc->num_args = 0;
           while(!end &&(cur_tkn = getToken(tkns,which))!= NULL){
             if (isSensitive(cur_tkn)) { //end search
               end = TRUE;
@@ -223,6 +224,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
                   return FALSE;
                 }
                 args = args + strlen(args)+1;
+                num_proc->num_args++;
                 break;
             }
           }
@@ -259,6 +261,174 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
 
   return TRUE;
 }
+
+
+_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
+  sigset_t blockset,emptyset;
+  if(sigemptyset(&blockset) == -1)
+    return FALSE;
+  if(sigemptyset(&emptyset) == -1)
+    return FALSE;
+  if(sigaddset(&blockset,SYNC_SIG) == -1)
+    return FALSE;
+
+  int index =0;
+  int fork_seq = 0;
+  for(;index<num_embryos;index++){
+    if(embryos[index].fork_seq == fork_seq){
+      int pipes[2];
+      if(pipe(pipes) == -1)
+        return FALSE;
+      pid_t pid;
+      switch (pid) {
+        case -1:{
+          return FALSE;
+          break;
+        }
+        case 0:{
+          if(close(pipes[0]) == -1)
+            //error
+          if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
+            //error
+          int fd_in;
+          if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
+            if(dup2(fd_in,STDIN_FILENO) == -1)
+              //error
+            if(close(fd_in) == -1)
+              //error
+          }
+          int fd_out;
+          if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
+            if(dup2(fd_out,STDOUT_FILENO) == -1)
+              //error
+            if(close(fd_out) == -1)
+              //error
+          }
+
+          char *args[embryos[index].num_args];
+          args[0] = embryos[index].program;
+          int args_index =1;
+          char *arguments = embryos[index].arguments;
+          for(;args_index<embryos[index].num_args;args_index++){
+            args[args_index] = arguments;
+            arguments = arguments+strlen(arguments)+1;
+          }
+
+          if(kill(getppid(),SYNC_SIG) == -1)
+            //error
+          siginfo_t info;
+          if(sigwaitinfo(&blockset,&info) == -1)
+            //error
+          if(info.si_signo!=SYNC_SIG)
+            //error
+          if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
+            //error
+          signal(SIGINT,SIG_DFL);
+          signal(SIGQUIT,SIG_DFL);
+          signal(SIGTSTP,SIG_DFL);
+
+          if(execv(args[0],args) == -1){
+            //write errno to pipe
+            if(write(pipes[1],errno,sizeof(int))!=sizeof(int)){
+              close(pipes[1]);
+              _exit(EXIT_FAILURE);
+            }
+          }
+          if(close(pipes[1]) == -1)
+            _exit(EXIT_FAILURE);
+          _exit(EXIT_SUCCESS);
+
+          break;
+        }
+        default:{
+
+          siginfo_t info;
+          if(sigwaitinfo(&blockset,&info) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+          if(info.si_signo!=SYNC_SIG){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+          if(close(pipes[1]) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+          int fd_in;
+          if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
+            if(close(fd_in) == -1){
+              kill(pid,SIGKILL);
+              return FALSE;
+            }
+          }
+          int fd_out;
+          if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
+            if(close(fd_out) == -1){
+              kill(pid,SIGKILL);
+              return FALSE;
+            }
+          }
+
+          if(!process_init(pman,&embryo[index],pid)){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+
+          if(kill(pid,SYNC_SIG) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+
+          if()
+
+
+
+          break;
+        }
+      }
+    }
+  }
+}
+
+
+/**
+* initializes process in process table
+* pman: ptr to process manager
+* name: name of process image
+* pid: process id
+* ground: process is fore or background
+* returns: status of success
+**/
+
+_BOOL process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
+
+  //look for unused process entry
+  int i =-1;
+  while((++i)<MAX_PROCESSES && pman->processpids[i]!=-1);
+  if(i<MAX_PROCESSES){
+    //set process image name
+    if(strlen(embryo->program)+1> MAX_PROCESSES)
+      return FALSE;
+    strcpy(pman->processnames[i],embryo->program);
+    pman->processpids[i] = pid;
+    pman->suspendedstatus[i] = FALSE;
+    if(!*embryo->background && pman->foreground_group == -1)
+      return FALSE;
+    if(*embryo->background && pman->background_group == -1){
+      pman->background_group = pid;
+    }
+
+    if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
+      return FALSE;
+  }
+  else
+    return FALSE;
+
+
+  return TRUE;
+}
+
 
 
 /**
@@ -303,34 +473,6 @@ _BOOL process_manager_init(PMANAGER* pman){
 */
 
 
-/**
-* initializes process in process table
-* pman: ptr to process manager
-* name: name of process image
-* pid: process id
-* ground: process is fore or background
-* returns: status of success
-**/
-/*
-_BOOL process_init(PMANAGER* pman,char* name,pid_t pid){
-
-  //look for unused process entry
-  int i =-1;
-  while((++i)<MAX_PROCESSES && pman->processpids[i]!=-1);
-
-  if(i<MAX_PROCESSES){
-    //set process image name
-    int name_length = strlen(name);
-    strncpy(pman->processnames[i],name,name_length);
-    pman->processnames[i][name_length]='\0';
-    pman->processpids[i] = pid;
-  }
-  else
-    return FALSE;
-
-
-  return TRUE;
-}*/
 
 /**
 * get the index of process with pid job
