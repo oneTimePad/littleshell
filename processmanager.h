@@ -32,6 +32,7 @@ typedef struct _EMBRYO_PROCESS{
   int my_pipe_other;
   _BOOL *background;
   _BOOL internal_command;
+  short internal_key;
 
 } EMBRYO;
 

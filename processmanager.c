@@ -7,10 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include "processmanager.h"
-
-_BOOL inInternal(char *str){
-  return FALSE;
-}
+#include "internal.h"
 
 
 /**
@@ -195,10 +192,12 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
             errno = ENOMEM;
             return FALSE;
           }
-          if(((strstr(cur_tkn,"/")!= NULL) ? strcpy(new_proc->program,cur_tkn) :( (inPath(cur_tkn,new_proc->program,PATH_LIM)&& !inInternal(cur_tkn)) ? new_proc->program : NULL) ) ==NULL){
+          if(((strstr(cur_tkn,"/")!= NULL) ? strcpy(new_proc->program,cur_tkn) :( (inPath(cur_tkn,new_proc->program,PATH_LIM)&& inInternal(cur_tkn)==NONE) ? new_proc->program : NULL) ) ==NULL){
             //it might be a command internal to the shell
-            if(inInternal(cur_tkn)){
+            short key;
+            if((key=inInternal(cur_tkn))!=NONE){
               new_proc->internal_command = TRUE;
+              new_proc->internal_key = key;
             }
             else{
                 info->cur_proc-=1;
@@ -536,16 +535,7 @@ _BOOL process_manager_init(PMANAGER* pman){
     pman->background_group=-1;
     pman->recent_foreground_status = 0;
 
-    //block some signals
-    sigset_t blockset;
-    if(sigemptyset(&blockset) == -1)
-      return FALSE;
-    if(sigaddset(&blockset,SYNC_SIG)==-1)
-      return FALSE;
-    if(sigaddset(&blockset,FAIL_SIG)==-1)
-      return FALSE;
-    if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
-      return FALSE;
+    
     //set tty for processes
     int my_pid = getpid();
     //put shell in foreground
