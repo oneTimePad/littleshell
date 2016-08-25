@@ -9,10 +9,10 @@
 #include <signal.h>
 
 #ifndef SYNC_SIG
-  #define SYNC_SIG SIGUSR1
+  #define SYNC_SIG SIGRTMIN+6
 #endif
 #ifndef FAIL_SIG
-  #define FAIL_SIG SIGUSR2
+  #define FAIL_SIG SIGRTMIN+7
 #endif
 
 
@@ -65,8 +65,10 @@ _BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
 
 //used for forked processes
 
-_BOOL processes_init(PMANAGER *,EMBRYO *,size_t);
+_BOOL processes_init(PMANAGER *,EMBRYO *,size_t,int *);
 _BOOL process_init(PMANAGER *,EMBRYO *,pid_t);
+_BOOL process_manager_init(PMANAGER*);
+
 
 _BOOL process_manager_init(PMANAGER *);
 void process_destroy(PMANAGER *,int);

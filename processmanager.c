@@ -262,9 +262,18 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
   return TRUE;
 }
 
-
+/**
+* converts embryos into actual processes
+* pman: manager for processes
+* embryos: list of embryos
+* num_embryos: number of embryos to be created
+* err_ptr: used to return child errno to caller
+* returns: status if false and, if errno is 0, check err_ptr(child error), else the parent had an error
+**/
 _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_ptr){
   errno = 0;
+  if(err_ptr == NULL){errno = EINVAL; return FALSE;}
+  //create blockset for waiting, emptyset for restoring child
   sigset_t blockset,emptyset;
   if(sigemptyset(&blockset) == -1)
     return FALSE;
@@ -276,26 +285,31 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
     return FALSE;
 
 
-  int index =0;
-  int fork_seq = 0;
+  int index =0; //current embryo
+  int fork_seq = 0; //current set of forked processes
   while(1){
-
-
+    //used to communicate child errno and synchronize
     int pipes[2];
     if(pipe(pipes) == -1)
       return FALSE;
+
     pid_t pid;
     switch (pid) {
+      //internal error
       case -1:{
         return FALSE;
         break;
       }
+      //child
       case 0:{
+        //close read end (not needed)
         if(close(pipes[0]) == -1)
           chldExit(errno);
+        //make write end CLOEXEC to determine if execed worked
         if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
           chldExit(errno);
-          //error
+
+        //duplicate stdin if necessary
         int fd_in;
         if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
           if(dup2(fd_in,STDIN_FILENO,TRUE) == -1)
@@ -303,6 +317,8 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
           if(close(fd_in) == -1)
             chldExit(errno);
         }
+
+        //duplicate stdout if necessary
         int fd_out;
         if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
           if(dup2(fd_out,STDOUT_FILENO) == -1)
@@ -311,6 +327,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             chldExit(errno);
         }
 
+        //create the args list
         char *args[embryos[index].num_args];
         args[0] = embryos[index].program;
         int args_index =1;
@@ -320,6 +337,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
           arguments = arguments+strlen(arguments)+1;
         }
 
+        //sigaction for dfl actions
         struct sigaction dfl_action;
         dfl_action.sa_handler = SIG_DFL;
         if(sigemptyset(&dfl_action.sa_mask) == -1)
@@ -328,20 +346,21 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
 
         //sync with parent
         union sigval val;
-        val.sival_int = -1;
+        val.sival_int = -1; //unused
         sigqueue(getppid(),SYNC_SIG,&val);
 
+        //wait for parent to finish process entry creation
         siginfo_t info;
         sigwaitinfo(&blockset,&info);
 
 
         if(info.si_signo != SYNC_SIG)
-          chldPipeExit(pipes[1],-1);
+          chldPipeExit(pipes[1],-1);//something very very...bad happened
 
-
+        //restore signal mask
         if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
           chldPipeExit(pipes[1],errno);
-
+        //restore signal dispositions
         if(sigaction(SIGINT,dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
         if(sigaction(SIGQUIT,dfl_action,NULL) == -1)
@@ -349,24 +368,23 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         if(sigaction(SIGTSTP,dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
 
+        //exec
         execv(args[0],args);
+        //exec failed notify parent and exit
         chldPipeExit(pipes[1],errno);
 
         break;
       }
+      //parent
       default:{
 
-        siginfo_t info;
-        sigwaitinfo(&blockset,&info);
-
-        if(info.si_signo!=SYNC_SIG){
-          *err_ptr = info.si_int;
-          return FALSE;
-        }
+        //whether this part happens before or after child doesn't matter
+        //close unused write end
         if(close(pipes[1]) == -1){
           kill(pid,SIGKILL);
           return FALSE;
         }
+        //close unused fd
         int fd_in;
         if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
           if(close(fd_in) == -1){
@@ -374,6 +392,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             return FALSE;
           }
         }
+        //close unused fd
         int fd_out;
         if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
           if(close(fd_out) == -1){
@@ -382,23 +401,38 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
           }
         }
 
+        ///wait for child to do preliminary setups
+        //protect against race
+        siginfo_t info;
+        sigwaitinfo(&blockset,&info);
+        //something went wrong, child died
+        if(info.si_signo!=SYNC_SIG){
+          *err_ptr = info.si_int; //give caller errno number
+          errno = 0; //sanity
+          return FALSE;
+        }
+
+        //setup process entry
         if(!process_init(pman,&embryo[index],pid)){
           kill(pid,SIGKILL);
           return FALSE;
         }
-
+        //notify child
         if(kill(pid,SYNC_SIG) == -1){
           kill(pid,SIGKILL);
           return FALSE;
         }
-
+        //synchronize again
+        //wait for pipe write end to close/or have something
         int err;
         switch (read(pipes[0],&err,sizeof(err))) {
+          //something really really bad happened
           case -1:{
             kill(pid,SIGKILL);
             close(pipes[0]);
             return FALSE;
           }
+          //exec worked everything is fine
           case 0{
             if(close(pipes[0]) == -1)
               return FALSE;
@@ -406,9 +440,11 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             *err_ptr = 0;
             break;
           }
+          //exec failed errno is in pipe (child died)
           default{
             if(close(pipes[0]) == -1)
               return FALSE;
+            //give call errno
             *err_ptr = err;
             return FALSE;
             break;
@@ -417,13 +453,17 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         break;
       }
     }
-
+    //if there are more embryos
     if(index+1<num_embryos){
+      //is the next embryo in the same fork seq?
       if(embryos[index+1].fork_seq!=fork_seq){
+          //if not wait for the current foreground group
           //wait
+          //update for_seq for next time
           fork_seq++;
       }
     }
+    //no more embryos, just wait for the foreground group and return
     else{
       //wait
       break;
@@ -443,7 +483,6 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
 * ground: process is fore or background
 * returns: status of success
 **/
-
 _BOOL process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
 
   //look for unused process entry
@@ -458,10 +497,11 @@ _BOOL process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
     pman->suspendedstatus[i] = FALSE;
     if(!*embryo->background && pman->foreground_group == -1)
       return FALSE;
+    //might be the first process in background group
     if(*embryo->background && pman->background_group == -1){
       pman->background_group = pid;
     }
-
+    //set process job group
     if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
       return FALSE;
   }
@@ -477,9 +517,8 @@ _BOOL process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
 /**
 * initialize process table
 * pman: ptr to process manager structure
-* returns: status of success
+* returns: status
 **/
-/*
 _BOOL process_manager_init(PMANAGER* pman){
     if(pman == NULL) return FALSE;
     int i =0;
@@ -492,28 +531,22 @@ _BOOL process_manager_init(PMANAGER* pman){
 
     sigset_t blockset;
     if(sigemptyset(&blockset) == -1)
-      errnoExit("sigemptyset()");
-    if(sigaddset(&blockset,FEXEC_SIG)==-1)
-      errnoExit("sigaddset()");
-    if(sigaddset(&blockset,FINTL_SIG)==-1)
-      errnoExit("sigaddset()");
-    if((pman->sig_fchl_fd=signalfd(-1,&blockset,SFD_NONBLOCK | SFD_CLOEXEC)) ==-1)
-      errnoExit("signalfd()");
-    if(sigdelset(&blockset,FINTL_SIG)==-1)
-      errnoExit("sigdelset()");
+      return FALSE;
     if(sigaddset(&blockset,SYNC_SIG)==-1)
-      errnoExit("sigaddset()");
+      return FALSE
+    if(sigaddset(&blockset,FAIL_SIG)==-1)
+      return FALSE;
     if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
-      errnoExit("sigprocmask()");
+      return FALSE;
 
-    pid_t my_pid = getpid();
+    int my_pid = getpid()
     //put shell in foreground
     tcsetpgrp(0,my_pid);
     pman->foreground_group=my_pid;
 
     return TRUE;
 }
-*/
+
 
 
 
