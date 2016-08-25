@@ -1,11 +1,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
-#include "tokenizer.h"
 #include "processmanager.h"
 
 _BOOL inInternal(char *str){
@@ -15,6 +15,11 @@ _BOOL inInternal(char *str){
 
 /**
 Managers process data structure creation and clean up
+**/
+
+/**
+* determines if first char in str is a shell understood character
+* returns: TRUE if is, FALSE if not
 **/
 static _BOOL isSensitive(char *str){
   switch (*str) {
@@ -224,7 +229,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
                   return FALSE;
                 }
                 args = args + strlen(args)+1;
-                num_proc->num_args++;
+                new_proc->num_args++;
                 break;
             }
           }
@@ -312,7 +317,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         //duplicate stdin if necessary
         int fd_in;
         if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
-          if(dup2(fd_in,STDIN_FILENO,TRUE) == -1)
+          if(dup2(fd_in,STDIN_FILENO) == -1)
             chldExit(errno);
           if(close(fd_in) == -1)
             chldExit(errno);
@@ -347,7 +352,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         //sync with parent
         union sigval val;
         val.sival_int = -1; //unused
-        sigqueue(getppid(),SYNC_SIG,&val);
+        sigqueue(getppid(),SYNC_SIG,val);
 
         //wait for parent to finish process entry creation
         siginfo_t info;
@@ -361,11 +366,11 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
           chldPipeExit(pipes[1],errno);
         //restore signal dispositions
-        if(sigaction(SIGINT,dfl_action,NULL) == -1)
+        if(sigaction(SIGINT,&dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
-        if(sigaction(SIGQUIT,dfl_action,NULL) == -1)
+        if(sigaction(SIGQUIT,&dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
-        if(sigaction(SIGTSTP,dfl_action,NULL) == -1)
+        if(sigaction(SIGTSTP,&dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
 
         //exec
@@ -413,7 +418,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         }
 
         //setup process entry
-        if(!process_init(pman,&embryo[index],pid)){
+        if(!process_init(pman,&embryos[index],pid)){
           kill(pid,SIGKILL);
           return FALSE;
         }
@@ -433,7 +438,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             return FALSE;
           }
           //exec worked everything is fine
-          case 0{
+          case 0:{
             if(close(pipes[0]) == -1)
               return FALSE;
 
@@ -441,7 +446,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             break;
           }
           //exec failed errno is in pipe (child died)
-          default{
+          default:{
             if(close(pipes[0]) == -1)
               return FALSE;
             //give call errno
@@ -458,14 +463,16 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
       //is the next embryo in the same fork seq?
       if(embryos[index+1].fork_seq!=fork_seq){
           //if not wait for the current foreground group
-          //wait
+          if(!process_wait_foreground(pman))
+            return FALSE;
           //update for_seq for next time
           fork_seq++;
       }
     }
     //no more embryos, just wait for the foreground group and return
     else{
-      //wait
+      if(!process_wait_foreground(pman))
+        return FALSE;
       break;
     }
 
@@ -529,17 +536,18 @@ _BOOL process_manager_init(PMANAGER* pman){
     pman->background_group=-1;
     pman->recent_foreground_status = 0;
 
+    //block some signals
     sigset_t blockset;
     if(sigemptyset(&blockset) == -1)
       return FALSE;
     if(sigaddset(&blockset,SYNC_SIG)==-1)
-      return FALSE
+      return FALSE;
     if(sigaddset(&blockset,FAIL_SIG)==-1)
       return FALSE;
     if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
       return FALSE;
-
-    int my_pid = getpid()
+    //set tty for processes
+    int my_pid = getpid();
     //put shell in foreground
     tcsetpgrp(0,my_pid);
     pman->foreground_group=my_pid;
@@ -547,52 +555,75 @@ _BOOL process_manager_init(PMANAGER* pman){
     return TRUE;
 }
 
+/**
+* clean up process entry on death
+* pman: ptr to process manager
+* proc_index: index in process table
+**/
+_BOOL process_destroy(PMANAGER *pman,int proc_index){
 
+  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
+  pman->processpids[proc_index] = -1;
+  return TRUE;
+}
 
 
 /**
-* get the index of process with pid job
-* returns index on success, -1 on error
+* wait on the foreground process group
 **/
-/*
-int process_search(pid_t job){
-  int i =0;
-  while(i++<MAX_PROCESSES&&pman->processpids[i]!=job);
-  return (i<MAX_PROCESSES) ? i : -1;
-}
+_BOOL process_wait_foreground(PMANAGER *pman){
+  if(pman->foreground_group == -1){errno = EINVAL; return FALSE;} //never happens
 
-void process_wait_foreground(PMANAGER *pman){
-  if(pman->foreground_group == -1) //never happens
-    errExit("%s\n","no foreground group but foreground processes exist");
   int status;
   pid_t job;
   //wait for all processes in the foreground group
   while((job = waitpid(-1*pman->foreground_group,&status,WUNTRACED))!=-1)
     process_status(pman,job,status,FALSE);
+  return TRUE;
 }
-*/
+
 /**
 * looks for process status changes and failures
 * pman: ptr to process manager
+* returns: status
 **/
-/*
-void process_reap(PMANAGER *pman){
+_BOOL process_reap(PMANAGER *pman){
   int status;
   pid_t job;
   //poll for processes with status changes
-  while((job = waitpid(-1,&status,WNOHANG | WUNTRACED | WIFCONTINUED))!=0 && job!=-1){
+  while((job = waitpid(-1,&status,WNOHANG | WUNTRACED | WCONTINUED))!=0 && job!=-1){
       process_status(pman,job,status,TRUE);
-
   }
 
   if(errno != ECHILD && errno !=0)
-    errnoExit("waitpid()");
+    return FALSE; //something bad happened
 
+  return TRUE;
+}
+
+/**
+* get the index of process with pid job
+* pman: process manager
+* job: pid of job to search for
+* returns: index on success, -1 on error
+**/
+int process_search(PMANAGER *pman,pid_t job){
+  int i =0;
+  while(i++<MAX_PROCESSES&&pman->processpids[i]!=job);
+  return (i<MAX_PROCESSES) ? i : -1;
 }
 
 
-void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
-  int index = process_search(job);
+/**
+* parses processes wait status when it is cleaned up
+* pman: process manager
+* job: pid of job that completed
+* status: status from waiting on that job
+* done_print: whether to print (DONE) for finished process
+* returns: status
+**/
+_BOOL process_status(PMANAGER *pman,pid_t job, int status,_BOOL done_print){
+  int index = process_search(pman,job);
   if(index == -1) return FALSE;
   //if process was suspended
   if(WIFSTOPPED(status)){
@@ -602,14 +633,15 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
   }
   //if process was killed by a signal
   else if(WIFSIGNALED(status)){
+
     //if it was SIGKILL, print the killed msg
     if(WTERMSIG(status) == SIGKILL){
-      printf("Killed                  %s",pman->processnames[index])
+      printf("Killed                  %s",pman->processnames[index]);
     }
     //convert signal to strmsg
     char *str_sig;
     if((str_sig=strsignal(WTERMSIG(status))) == NULL)
-      errnoExit("strsignal()");
+      return FALSE;
     else
       printf("%s ",str_sig);
     //notify of core dump
@@ -617,6 +649,8 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
     if(WCOREDUMP(status))
       printf("(core dumped)");
     #endif
+    //clean up process entry
+    process_destroy(pman,index);
 
   }
   //if a process was continued without the use of fg
@@ -626,16 +660,19 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
     if(setpgid(job,pman->background_group))
     printf("Continued                %s",pman->processnames[index]);
   }
-
+  //process just exited
   else if(WIFEXITED(status) && done_print){
     printf("DONE                     %s",pman->processnames[index]);
+    //clean up process entry
+    process_destroy(pman,index);
   }
 
   printf("\n");
 
 
+
 }
-*/
+
 
 /**
 * moves job to the foreground
@@ -643,33 +680,39 @@ void process_status(PMANAGER* pman,pid_t job, int status,_BOOL done_print){
 * job: process id of job to move to foreground
 * returns: status
 **/
-/*
-_BOOL process_foreground(PMANAGER* pman,pid_t job){
-  int index = process_search(job);
-  if(index == -1) return FALSE;
+_BOOL process_foreground(PMANAGER *pman,pid_t job){
+  //get index of this job in pman
+  int index = process_search(pman,job);
+  if(index == -1) return FALSE; //something very bad
 
-
+  //get proc job cntrl group
   int pgrp = getpgid(job);
 
-  if(pman->suspendedstatus[i] && pgrp == pman->process_foreground){
+  //if suspended and in the foreground_group
+  if(pman->suspendedstatus[index] && pgrp == pman->foreground_group){
+    //continue
     if(kill(job,SIGCONT)==-1)
-      errnoExit("kill()");
+      return FALSE;
   }
+  //if in the background group
   else if(pgrp == pman->background_group){
+    //change groups
     if(setpgid(job,pman->foreground_group)==-1)
-      errnoExit("setpgid()");
+      return FALSE;
+
     if(kill(job,SIGCONT)==-1)
-      errnoExit("kill()");
+      return FALSE;
   }
   else
+    return FALSE; //invalid operation
+
+  pman->suspendedstatus[index]=FALSE;
+  //wait for this process to finish
+  if(!process_wait_foreground(pman))
     return FALSE;
 
-  pman->suspendedstatus[i]=FALSE;
-  //wait for this process to finish
-  process_wait_foreground(pman);
-
   return TRUE;
-}*/
+}
 
 
 /**
@@ -677,53 +720,43 @@ _BOOL process_foreground(PMANAGER* pman,pid_t job){
 * pman: ptr to process manager
 * job: process id of job
 **/
-/*
-_BOOL process_background(PMANAGER* pman, pid_t job){
+_BOOL process_background(PMANAGER *pman, pid_t job){
+  //get the index of this job in pman
+  int index = process_search(pman,job);
+  if(index == -1) return FALSE; //something very bad
 
-  int index = process_search(job);
-  if(index == -1) return FALSE;
-
+  //get job cntrl group
   int pgrp = getpgid(job);
 
-  if(pman->suspendedstatus[i] && pgrp == pman->foreground_group){
+  //if suspended and is in the foreground
+  if(pman->suspendedstatus[index] && pgrp == pman->foreground_group){
+    //move to the background
     if(setpgid(job,pman->background_group) == -1)
-      errnoExit("setpgid()");
+      return FALSE;
+    //tell it to continue
     if(kill(job,SIGCONT)==-1)
-      errnoExit("kill()");
-    pman->suspendedstatus[i]=FALSE;
+      return FALSE;
+    pman->suspendedstatus[index]=FALSE;
   }
   else
-    return FALSE;
+    return FALSE; //invalid operation
 
   return TRUE;
-}*/
-
-/**
-* clean up process entry on death
-* pman: ptr to process manager
-* proc_index: index in process table
-**/
-/*
-static void process_destroy(PMANAGER* pman,int proc_index){
-
-  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
-  pman->processpids[proc_index] = -1;
 }
-*/
 
 /**
-* prints out a list of active processes
+* prints out a list of status of process in pman
 * pman: ptr to process manager
 **/
-/*
-void process_dump(PMANAGER* pman){
+_BOOL process_dump(PMANAGER *pman){
 
   int i = 0;
-  for(;i<MAX_PROCESSES;i++)
+  for(;i<MAX_PROCESSES;i++){
     if(pman->processpids[i]!=-1 && pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s SUSPENDED\n",pman->processpids[i],pman->processnames[i]);
     else if(pman->processpids[i]!=-1 && !pman->suspendedstatus[i])
       printf("JOB: %d NAME: %s RUNNING\n",pman->processpids[i],pman->processnames[i]);
+  }
+  return TRUE;
 
-
-}*/
+}

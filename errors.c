@@ -1,4 +1,5 @@
 #include "errors.h"
+#include "processmanager.h"
 
 
 
@@ -23,13 +24,13 @@ inline void errnoExit(const char* fct_name){
 inline void chldKill(int value){
   union sigval val;
   val.sival_int = value;
-  sigqueue(getppid(),FAIL_SIG,&val) == -1);
+  sigqueue(getppid(),FAIL_SIG,val);
   _exit(EXIT_FAILURE);
 
 }
 
 void chldPipeExit(int pipe_fd,int value){
-  write(pipe_fd,value,sizeof(int));
+  write(pipe_fd,&value,sizeof(int));
   close(pipe_fd);
   _exit(EXIT_FAILURE);
 }

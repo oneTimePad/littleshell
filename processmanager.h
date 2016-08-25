@@ -6,6 +6,7 @@
 #define MAX_ARG_LEN  100
 #include "bool.h"
 #include "path.h"
+#include "tokenizer.h"
 #include <signal.h>
 
 #ifndef SYNC_SIG
@@ -34,6 +35,7 @@ typedef struct _EMBRYO_PROCESS{
 
 } EMBRYO;
 
+//allows for embryo init to continue where left off
 typedef struct _EMBRYO_INFO{
   int cur_proc;
   _BOOL pipe_present;
@@ -64,20 +66,16 @@ _BOOL embryo_init(TOKENS *,EMBRYO *, EMBRYO_INFO *);
 _BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
 
 //used for forked processes
-
 _BOOL processes_init(PMANAGER *,EMBRYO *,size_t,int *);
 _BOOL process_init(PMANAGER *,EMBRYO *,pid_t);
-_BOOL process_manager_init(PMANAGER*);
-
-
 _BOOL process_manager_init(PMANAGER *);
-void process_destroy(PMANAGER *,int);
-int process_search(pid_t);
-void process_wait_foreground(PMANAGER *);
-void process_reap(PMANAGER *);
-void process_status(PMANAGER *, pid_t, int,_BOOL);
-_BOOL process_foreground(PMANAGER *, pid_t);
-_BOOL process_background(PMANAGER *, pid_t);
-void process_dump(PMANAGER*);
+_BOOL process_destroy(PMANAGER *,int);
+_BOOL process_wait_foreground(PMANAGER *);
+_BOOL process_reap(PMANAGER *);
+int   process_search(PMANAGER *,pid_t);
+_BOOL process_status(PMANAGER *,pid_t , int,_BOOL);
+_BOOL process_foreground(PMANAGER *,pid_t);
+_BOOL process_background(PMANAGER *pman, pid_t);
+_BOOL process_dump(PMANAGER *);
 
 #endif
