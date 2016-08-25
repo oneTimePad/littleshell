@@ -291,6 +291,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
 
   int index =0; //current embryo
   int fork_seq = 0; //current set of forked processes
+
   while(1){
     //used to communicate child errno and synchronize
     int pipes[2];
@@ -340,6 +341,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
           args[args_index] = arguments;
           arguments = arguments+strlen(arguments)+1;
         }
+        args[args_index] = NULL;
 
         //sigaction for dfl actions
         struct sigaction dfl_action;
@@ -372,10 +374,19 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         if(sigaction(SIGTSTP,&dfl_action,NULL) == -1)
           chldPipeExit(pipes[1],errno);
 
-        //exec
-        execv(args[0],args);
-        //exec failed notify parent and exit
-        chldPipeExit(pipes[1],errno);
+        if(!embryos[index].internal_command){
+          //exec
+          execv(args[0],args);
+          //exec failed notify parent and exit
+          chldPipeExit(pipes[1],errno);
+        }
+        else{
+          //run internal command
+          errno = 0;
+          if(!execute_internal(pipes[1],embryos[index].internal_key,pman,args))
+            chldPipeExit(pipes[1],errno);
+
+        }
 
         break;
       }
@@ -462,16 +473,20 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
       //is the next embryo in the same fork seq?
       if(embryos[index+1].fork_seq!=fork_seq){
           //if not wait for the current foreground group
-          if(!process_wait_foreground(pman))
-            return FALSE;
+          if(!*embryos[index].background){
+            if(!process_wait_foreground(pman))
+              return FALSE;
+          }
           //update for_seq for next time
           fork_seq++;
       }
     }
     //no more embryos, just wait for the foreground group and return
     else{
-      if(!process_wait_foreground(pman))
-        return FALSE;
+      if(!*embryos[index].background){
+        if(!process_wait_foreground(pman))
+          return FALSE;
+      }
       break;
     }
 
@@ -535,7 +550,7 @@ _BOOL process_manager_init(PMANAGER* pman){
     pman->background_group=-1;
     pman->recent_foreground_status = 0;
 
-    
+
     //set tty for processes
     int my_pid = getpid();
     //put shell in foreground
