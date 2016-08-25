@@ -16,14 +16,21 @@ inline void errnoExit(const char* fct_name){
 
 
 /**
-* used for a new child process to signal its parent of failure
-* fct_name: func that caused the error
+* used for a new child process to signal its parent of failure or synchronization
+* pipe_end: write end
+* value: errno or sync value
 **/
-inline void chldExit(){
+inline void chldKill(int value){
   union sigval val;
-  val.sival_int = errno;
-  if(sigqueue(getppid(),SIG_FCHLD,&val)==-1)
-      _exit(EXIT_FAILURE); // all hell breaks lose
+  val.sival_int = value;
+  sigqueue(getppid(),FAIL_SIG,&val) == -1);
+  _exit(EXIT_FAILURE);
+
+}
+
+void chldPipeExit(int pipe_fd,int value){
+  write(pipe_fd,value,sizeof(int));
+  close(pipe_fd);
   _exit(EXIT_FAILURE);
 }
 

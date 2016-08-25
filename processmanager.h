@@ -11,7 +11,9 @@
 #ifndef SYNC_SIG
   #define SYNC_SIG SIGUSR1
 #endif
-
+#ifndef FAIL_SIG
+  #define FAIL_SIG SIGUSR2
+#endif
 
 
 extern const char * const sys_siglist[];

@@ -263,7 +263,8 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
 }
 
 
-_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
+_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_ptr){
+  errno = 0;
   sigset_t blockset,emptyset;
   if(sigemptyset(&blockset) == -1)
     return FALSE;
@@ -271,124 +272,166 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
     return FALSE;
   if(sigaddset(&blockset,SYNC_SIG) == -1)
     return FALSE;
+  if(sigaddset(&blockset,FAIL_SIG) == -1)
+    return FALSE;
+
 
   int index =0;
   int fork_seq = 0;
-  for(;index<num_embryos;index++){
-    if(embryos[index].fork_seq == fork_seq){
-      int pipes[2];
-      if(pipe(pipes) == -1)
+  while(1){
+
+
+    int pipes[2];
+    if(pipe(pipes) == -1)
+      return FALSE;
+    pid_t pid;
+    switch (pid) {
+      case -1:{
         return FALSE;
-      pid_t pid;
-      switch (pid) {
-        case -1:{
+        break;
+      }
+      case 0:{
+        if(close(pipes[0]) == -1)
+          chldExit(errno);
+        if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
+          chldExit(errno);
+          //error
+        int fd_in;
+        if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
+          if(dup2(fd_in,STDIN_FILENO,TRUE) == -1)
+            chldExit(errno);
+          if(close(fd_in) == -1)
+            chldExit(errno);
+        }
+        int fd_out;
+        if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
+          if(dup2(fd_out,STDOUT_FILENO) == -1)
+            chldExit(errno);
+          if(close(fd_out) == -1)
+            chldExit(errno);
+        }
+
+        char *args[embryos[index].num_args];
+        args[0] = embryos[index].program;
+        int args_index =1;
+        char *arguments = embryos[index].arguments;
+        for(;args_index<embryos[index].num_args;args_index++){
+          args[args_index] = arguments;
+          arguments = arguments+strlen(arguments)+1;
+        }
+
+        struct sigaction dfl_action;
+        dfl_action.sa_handler = SIG_DFL;
+        if(sigemptyset(&dfl_action.sa_mask) == -1)
+          chldExit(errno);
+        dfl_action.sa_flags = 0;
+
+        //sync with parent
+        union sigval val;
+        val.sival_int = -1;
+        sigqueue(getppid(),SYNC_SIG,&val);
+
+        siginfo_t info;
+        sigwaitinfo(&blockset,&info);
+
+
+        if(info.si_signo != SYNC_SIG)
+          chldPipeExit(pipes[1],-1);
+
+
+        if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
+          chldPipeExit(pipes[1],errno);
+
+        if(sigaction(SIGINT,dfl_action,NULL) == -1)
+          chldPipeExit(pipes[1],errno);
+        if(sigaction(SIGQUIT,dfl_action,NULL) == -1)
+          chldPipeExit(pipes[1],errno);
+        if(sigaction(SIGTSTP,dfl_action,NULL) == -1)
+          chldPipeExit(pipes[1],errno);
+
+        execv(args[0],args);
+        chldPipeExit(pipes[1],errno);
+
+        break;
+      }
+      default:{
+
+        siginfo_t info;
+        sigwaitinfo(&blockset,&info);
+
+        if(info.si_signo!=SYNC_SIG){
+          *err_ptr = info.si_int;
           return FALSE;
-          break;
         }
-        case 0:{
-          if(close(pipes[0]) == -1)
-            //error
-          if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
-            //error
-          int fd_in;
-          if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
-            if(dup2(fd_in,STDIN_FILENO) == -1)
-              //error
-            if(close(fd_in) == -1)
-              //error
-          }
-          int fd_out;
-          if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
-            if(dup2(fd_out,STDOUT_FILENO) == -1)
-              //error
-            if(close(fd_out) == -1)
-              //error
-          }
-
-          char *args[embryos[index].num_args];
-          args[0] = embryos[index].program;
-          int args_index =1;
-          char *arguments = embryos[index].arguments;
-          for(;args_index<embryos[index].num_args;args_index++){
-            args[args_index] = arguments;
-            arguments = arguments+strlen(arguments)+1;
-          }
-
-          if(kill(getppid(),SYNC_SIG) == -1)
-            //error
-          siginfo_t info;
-          if(sigwaitinfo(&blockset,&info) == -1)
-            //error
-          if(info.si_signo!=SYNC_SIG)
-            //error
-          if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
-            //error
-          signal(SIGINT,SIG_DFL);
-          signal(SIGQUIT,SIG_DFL);
-          signal(SIGTSTP,SIG_DFL);
-
-          if(execv(args[0],args) == -1){
-            //write errno to pipe
-            if(write(pipes[1],errno,sizeof(int))!=sizeof(int)){
-              close(pipes[1]);
-              _exit(EXIT_FAILURE);
-            }
-          }
-          if(close(pipes[1]) == -1)
-            _exit(EXIT_FAILURE);
-          _exit(EXIT_SUCCESS);
-
-          break;
+        if(close(pipes[1]) == -1){
+          kill(pid,SIGKILL);
+          return FALSE;
         }
-        default:{
+        int fd_in;
+        if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
+          if(close(fd_in) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+        }
+        int fd_out;
+        if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
+          if(close(fd_out) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+        }
 
-          siginfo_t info;
-          if(sigwaitinfo(&blockset,&info) == -1){
+        if(!process_init(pman,&embryo[index],pid)){
+          kill(pid,SIGKILL);
+          return FALSE;
+        }
+
+        if(kill(pid,SYNC_SIG) == -1){
+          kill(pid,SIGKILL);
+          return FALSE;
+        }
+
+        int err;
+        switch (read(pipes[0],&err,sizeof(err))) {
+          case -1:{
             kill(pid,SIGKILL);
+            close(pipes[0]);
             return FALSE;
           }
-          if(info.si_signo!=SYNC_SIG){
-            kill(pid,SIGKILL);
-            return FALSE;
-          }
-          if(close(pipes[1]) == -1){
-            kill(pid,SIGKILL);
-            return FALSE;
-          }
-          int fd_in;
-          if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
-            if(close(fd_in) == -1){
-              kill(pid,SIGKILL);
+          case 0{
+            if(close(pipes[0]) == -1)
               return FALSE;
-            }
+
+            *err_ptr = 0;
+            break;
           }
-          int fd_out;
-          if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
-            if(close(fd_out) == -1){
-              kill(pid,SIGKILL);
+          default{
+            if(close(pipes[0]) == -1)
               return FALSE;
-            }
-          }
-
-          if(!process_init(pman,&embryo[index],pid)){
-            kill(pid,SIGKILL);
+            *err_ptr = err;
             return FALSE;
+            break;
           }
-
-          if(kill(pid,SYNC_SIG) == -1){
-            kill(pid,SIGKILL);
-            return FALSE;
-          }
-
-          if()
-
-
-
-          break;
         }
+        break;
       }
     }
+
+    if(index+1<num_embryos){
+      if(embryos[index+1].fork_seq!=fork_seq){
+          //wait
+          fork_seq++;
+      }
+    }
+    else{
+      //wait
+      break;
+    }
+
   }
+
+  return TRUE;
 }
 
 
