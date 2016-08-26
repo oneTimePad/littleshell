@@ -15,6 +15,7 @@
 #include "processmanager.h"
 #include "errors.h"
 #include "internal.h"
+#include "path.h"
 
 
 
@@ -24,11 +25,23 @@ void term_handler(int sig){
     term_signal = 1;
 }
 
-
+#define MAX_LINE_LEN 100000
 
 int main(){
-  PMANAGER *pman;
-  shell_init(&pman);
+  PMANAGER pman;
+  char line[MAX_LINE_LEN];
+
+  INIT init_opt;
+  init_opt.term_handler = &term_handler;
+  init_opt.path = LPATH;
+  init_opt.pman = &pman;
+  init_opt.line = line;
+  init_opt.line_size = MAX_LINE_LEN;
+  //initialize the shell
+  if(!shell_init(&init_opt))
+    errnoExit("shell_init()");
+  printf("%s\n",line);
+
 
 //main loop
   while(1){

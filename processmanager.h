@@ -18,7 +18,6 @@
 
 
 extern const char * const sys_siglist[];
-typedef enum {FORE , BACK} _GROUND;
 
 //used for storing info on a process to be created
 //an embryo process is one queued to be forked, but not yet forked
