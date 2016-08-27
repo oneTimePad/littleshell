@@ -1,5 +1,5 @@
 #include "errors.h"
-#include "processmanager.h"
+#include "internal.h"
 
 
 
@@ -9,9 +9,10 @@
 * fct_name: name of fct with error
 **/
 inline void errnoExit(const char* fct_name){
+
   if(errno == 0) return;
   perror(fct_name);
-  exit(EXIT_FAILURE);
+  
 }
 
 
