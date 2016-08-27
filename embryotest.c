@@ -30,7 +30,7 @@ main(int argc,char *argv[]){
   info.last_sequence = '\0';
   info.pipe_present = FALSE;
   info.continuing = FALSE;
-  if(!embryo_init(&tkns,embryos,&info))
+  if(!embryo_init(&tkns,embryos,MAX_PROCESSES,&info))
     printf("failed\n");
   exit(EXIT_SUCCESS);
 }

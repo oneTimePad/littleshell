@@ -68,7 +68,7 @@ int main(){
     if(!initializeTokens(&curr_tkn,input_buf,bytes_read)){
       continue;
     }
-
+    if(strstr)
     execute(pman,tkns);
 
 

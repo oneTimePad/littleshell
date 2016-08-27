@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include "processmanager.h"
 #include "internal.h"
+#include "errors.h"
 
 
 /**
@@ -72,7 +73,7 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 * info: contains information about where to start( i.e to be used if we are continuing from a previous call to embryos_init)
 * returns: status, return FALSE and errno is set to EINVAL for bad syntax or 0 if we don't have enough info (i.e go back to shell)
 **/
-_BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
+_BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   if(info == NULL | tkns == NULL || procs == NULL) {errno = EFAULT; return FALSE;}
   char *cur_tkn;
   int which = CURR_TOKEN;
@@ -181,6 +182,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
           break;
         }
         default:{ //create the process embryo entry
+          if(info->cur_proc+1 >= size){errno = ENOMEM; return FALSE;}
           EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
           new_proc->fork_seq = info->fork_seq; //set the fork sequence
           new_proc->internal_command = FALSE;
@@ -274,9 +276,10 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
 * err_ptr: used to return child errno to caller
 * returns: status if false and, if errno is 0, check err_ptr(child error), else the parent had an error
 **/
-_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_ptr){
+_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
+  int err_ind =0 ;
   errno = 0;
-  if(err_ptr == NULL){errno = EINVAL; return FALSE;}
+
   //create blockset for waiting, emptyset for restoring child
   sigset_t blockset,emptyset;
   if(sigemptyset(&blockset) == -1)
@@ -422,13 +425,13 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
         sigwaitinfo(&blockset,&info);
         //something went wrong, child died
         if(info.si_signo!=SYNC_SIG){
-          *err_ptr = info.si_int; //give caller errno number
-          errno = 0; //sanity
+          errno = info.si_int; //give caller errno number
           return FALSE;
         }
 
         //setup process entry
-        if(!process_init(pman,&embryos[index],pid)){
+        int id;
+        if((id = process_init(pman,&embryos[index],pid)) == -1){
           kill(pid,SIGKILL);
           return FALSE;
         }
@@ -452,22 +455,24 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             if(close(pipes[0]) == -1)
               return FALSE;
 
-            *err_ptr = 0;
+            err_ind = 0; //reset if some proc in the current fork seq succeeded
             break;
           }
           //exec failed errno is in pipe (child died)
           default:{
             if(close(pipes[0]) == -1)
               return FALSE;
-            //give call errno
-            *err_ptr = err;
-            return FALSE;
+            pman->err[id] = err;
+            //notify caller of error
+            err_ind = fork_seq; //a proc in the current fork seq failed
             break;
           }
         }
         break;
       }
     }
+
+
     //if there are more embryos
     if(index+1<num_embryos){
       //is the next embryo in the same fork seq?
@@ -477,16 +482,21 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
             if(!process_wait_foreground(pman))
               return FALSE;
           }
+          //whether the proc is background or not doesn't matter since having a & before an && is invalid syntax
+          if(err_ind != 0) // the last fork_seq needs to succeed to move on
+            return FALSE; //if this is true we can't continue
           //update for_seq for next time
           fork_seq++;
       }
     }
     //no more embryos, just wait for the foreground group and return
-    else{
+    else{ //whether there is an error or not we leave
       if(!*embryos[index].background){
         if(!process_wait_foreground(pman))
           return FALSE;
+
       }
+
       break;
     }
 
@@ -504,33 +514,34 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos,int *err_
 * ground: process is fore or background
 * returns: status of success
 **/
-_BOOL process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
+int process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
 
   //look for unused process entry
   int i =-1;
   while((++i)<MAX_PROCESSES && pman->processpids[i]!=-1);
   if(i<MAX_PROCESSES){
+    pman->err[i] = 0;
     //set process image name
     if(strlen(embryo->program)+1> MAX_PROCESSES)
-      return FALSE;
+      return -1;
     strcpy(pman->processnames[i],embryo->program);
     pman->processpids[i] = pid;
     pman->suspendedstatus[i] = FALSE;
     if(!*embryo->background && pman->foreground_group == -1)
-      return FALSE;
+      return -1;
     //might be the first process in background group
     if(*embryo->background && pman->background_group == -1){
       pman->background_group = pid;
     }
     //set process job group
     if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
-      return FALSE;
+      return -1;
   }
   else
-    return FALSE;
+    return -1;
 
 
-  return TRUE;
+  return i;
 }
 
 
@@ -569,6 +580,7 @@ _BOOL process_destroy(PMANAGER *pman,int proc_index){
 
   memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
   pman->processpids[proc_index] = -1;
+  pman->err[proc_index] = 0;
   return TRUE;
 }
 
@@ -630,6 +642,16 @@ int process_search(PMANAGER *pman,pid_t job){
 _BOOL process_status(PMANAGER *pman,pid_t job, int status,_BOOL done_print){
   int index = process_search(pman,job);
   if(index == -1) return FALSE;
+  errno = 0;
+
+  //if process failed to be started with some error(print it)
+  if(pman->err[index]!=0){
+    errno = pman->err[index];
+    perror(pman->processnames[index]);
+    errno = 0;
+    process_destroy(pman,index);
+    return TRUE;
+  }
   //if process was suspended
   if(WIFSTOPPED(status)){
     //if it was the cause of ctl-Z

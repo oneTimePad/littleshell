@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include "tokenizer.h"
-#include "path.h"
+
 
 
 
@@ -20,13 +20,10 @@ main(int argc,char *argv[]){
   if(!initializeTokens(&tkns,input_buf,bytes_read)){
     exit(1);
   }
-
   int i;
   char * str;
   for(i=CURR_TOKEN; (str=getToken(&tkns,i))!=NULL; i=NEXT_TOKEN){
-    char p[PATH_LIM+1];
-    if(inPath(str,p,PATH_LIM))
-      printf("TRUE\n");
+    printf("%s",str);
   }
   exit(EXIT_SUCCESS);
 }

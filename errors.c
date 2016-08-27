@@ -21,7 +21,7 @@ inline void errnoExit(const char* fct_name){
 * pipe_end: write end
 * value: errno or sync value
 **/
-inline void chldKill(int value){
+inline void chldExit(int value){
   union sigval val;
   val.sival_int = value;
   sigqueue(getppid(),FAIL_SIG,val);

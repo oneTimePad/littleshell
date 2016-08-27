@@ -55,19 +55,19 @@ typedef struct _PMANAGER{
   //process group ids
   pid_t foreground_group;
   pid_t background_group;
-
+  int err[MAX_PROCESSES];
   //return status of most recent foreground process
   int recent_foreground_status;
 
 } PMANAGER;
 
 //used for embryo processes
-_BOOL embryo_init(TOKENS *,EMBRYO *, EMBRYO_INFO *);
+_BOOL embryo_init(TOKENS *,EMBRYO *,size_t, EMBRYO_INFO *);
 _BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
 
 //used for forked processes
-_BOOL processes_init(PMANAGER *,EMBRYO *,size_t,int *);
-_BOOL process_init(PMANAGER *,EMBRYO *,pid_t);
+_BOOL processes_init(PMANAGER *,EMBRYO *,size_t);
+int process_init(PMANAGER *,EMBRYO *,pid_t);
 _BOOL process_manager_init(PMANAGER *);
 _BOOL process_destroy(PMANAGER *,int);
 _BOOL process_wait_foreground(PMANAGER *);

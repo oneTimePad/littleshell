@@ -16,7 +16,7 @@
 
 inline void errnoExit(const char* fct_name);
 inline  void usageExit(const char* format,...);
-inline void chldKill(int);
+inline void chldExit(int);
 void chldPipeExit(int ,int);
 
 

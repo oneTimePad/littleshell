@@ -238,7 +238,7 @@ _BOOL execute_internal(int pipe_end,short key,PMANAGER* pman,char **args){
         if(close(pipe_end) == -1){
           _exit(EXIT_FAILURE);
         }
-        print_help("\r%s\n",help_info,args);
+        shell_help("\r%s\n",args);
         break;
     default:
       errno = EINVAL;
