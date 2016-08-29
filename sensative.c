@@ -42,6 +42,10 @@ _BOOL pre_redirstdin_handler(EMBRYO *procs, EMBRYO_INFO *info,char which){
     return FALSE;
 
   }
+
+
+  //instead of doing this, just concat to jobnames in
+  //embryo
   procs[info->cur_proc].num_components_job_name++;
   info->last_sequence = which;
   return TRUE;

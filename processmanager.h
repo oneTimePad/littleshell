@@ -26,6 +26,7 @@ extern const char * const sys_siglist[];
 typedef struct _EMBRYO_PROCESS{
   char  program[PATH_LIM];
   char  arguments[MAX_ARGUMENT*MAX_ARG_LEN];
+  char  forkseqname[MAX_JOB_NAME][MAX_JOBS];
   int   num_args;
   int   p_stdin;
   int   p_stdout;

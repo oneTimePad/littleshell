@@ -139,6 +139,11 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   int which = CURR_TOKEN;
 
   while((cur_tkn = getToken(tkns,which))!=NULL){
+
+    //replace these with function pointers
+    //for prehandlers
+    //certain handlers can choose to get the current process
+    //or create a new owner
       switch (*cur_tkn) {
         case PIPE:{
           if(!ePIPE(procs,info))
@@ -199,7 +204,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           break;
         }
         case BACK_GR:{
-          if(info->cur_proc == -1|| info->continuing || info->pipe_present){
+          if(info->cur_proclinux SIGTTO == -1|| info->continuing || info->pipe_present){
             if(!embryo_clean(procs,info))
               return FALSE;
             errno = EINVAL;
@@ -233,6 +238,8 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           which = CURR_TOKEN;
           break;
         }
+        //put post handlers here, if there is no post handler
+        //just reset and create new proc
         default:{ //create the process embryo entry
           if(info->cur_proc+1 >= size){errno = ENOMEM; return FALSE;}
           if(info->cur_proc-1>=0){procs[info->cur_proc].num_components_job_name++;}
