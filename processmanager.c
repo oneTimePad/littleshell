@@ -85,6 +85,25 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
 
   EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
   new_proc->fork_seq = info->fork_seq; //set the fork sequence
+
+  if(info_cur_proc-1 <0 || procs[info->cur_proc-1].fork_seq != new_proc->fork_seq){
+    if(strlen(name)+1 > MAX_JOB_NAME){
+      errno = ENOMEM;
+      return FALSE;
+    }
+    strcpy(procs->forkseqname[info->fork_seq-1],name);
+  }
+  else{
+    if(strlen(name)+strlen(procs->forkseqname[info->fork_seq-1])+2 > MAX_JOB_NAME){
+      errno = ENOMEM;
+      return FALSE;
+    }
+    strcat(procs->forkseqname[info->forkseqname-1]," ");
+    strcat(procs->forkseqname[info->forkseqname-1],name);
+
+  }
+
+
   new_proc->internal_command = FALSE;
   //attempt to get the process name and check if it is in the path if necessary
   if(strlen(cur_tkn)+1>PATH_LIM){
