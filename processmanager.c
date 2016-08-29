@@ -80,12 +80,21 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 }
 
 
+/**
+* adds a new embryo to the list of embryos
+* procs: list of embryos
+* info: information about current execution context of embryos_init
+* name: name of this embryo
+**/
 _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   if(info->cur_proc+1 >= size){errno = ENOMEM; return FALSE;}
 
   EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
   new_proc->fork_seq = info->fork_seq; //set the fork sequence
 
+  //starts forming the job name
+  //first entry in the job
+  //forkseqname is the pre-cursor to jobname
   if(info_cur_proc-1 <0 || procs[info->cur_proc-1].fork_seq != new_proc->fork_seq){
     if(strlen(name)+1 > MAX_JOB_NAME){
       errno = ENOMEM;
@@ -93,6 +102,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
     }
     strcpy(procs->forkseqname[info->fork_seq-1],name);
   }
+  //this is not the first entry in the job
   else{
     if(strlen(name)+strlen(procs->forkseqname[info->fork_seq-1])+2 > MAX_JOB_NAME){
       errno = ENOMEM;
@@ -103,7 +113,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
 
   }
 
-
+  //form the acutall path name for this embryo( i.e. what goes into execve)
   new_proc->internal_command = FALSE;
   //attempt to get the process name and check if it is in the path if necessary
   if(strlen(cur_tkn)+1>PATH_LIM){
@@ -124,7 +134,9 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
         return FALSE;
       }
   }
+  //set up args
   new_proc->num_args = 0;
+  //set up file-descriptors
   new_proc->my_pipe_other = -1;
   new_proc->p_stdin = -1;
   new_proc->p_stdout = -1;
