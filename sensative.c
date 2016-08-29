@@ -81,10 +81,33 @@ _BOOL pre_and_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
 }
 
 
-
-
 _BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, EMBRYO *new_proc){
+  //if a pipe is present and the current proc's fork seq matches the fork seq of the previous proc in the pipe
+  if(info->last_sequence == PIPE && new_proc->fork_seq == procs[info->cur_proc-1].fork_seq){
+    if(new_proc->p_stdin != -1){
+      info->cur_proc-=1;
+      errno = EINVAL;
+      return FALSE;
+    }
+    new_proc->p_stdin = procs[info->cur_proc-1].my_pipe_other;
+    //the last process in pipe which determine the background--ptr them all to the same _BOOL
+    new_proc->background = procs[info->cur_proc-1].background;
+    info->last_sequence = '\0';
+  }
+  //fork seq's don't match but pipe is present( i.e  proc1 && | proc2 occured which is invalid)
+  else if(info->last_sequence == PIPE){
+    info->cur_proc-=1;
+    errno = EINVAL;
+    return FALSE;
 
+  }
+  //else no pipe is present
+  else{
+    new_proc->background = (_BOOL *)malloc(sizeof(_BOOL));
+    *new_proc->background = FALSE;
+  }
+
+  return TRUE;
 }
 
 
