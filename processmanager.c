@@ -81,42 +81,6 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 
 
 
-_BOOL ePIPE(EMBRYO *embryos,EMBRYO_INFO *info){
-  int pipes[2];
-  //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
-  if(info->cur_proc == -1 || info->continuing|| procs[info->cur_proc].p_stdout!=-1 || info->last_sequence == PIPE || *procs[info->cur_proc].background){
-    errno = EINVAL;
-    return FALSE;
-  }
-  if(pipe(pipes) == -1)
-    return FALSE;
-  //start pipeline
-  procs[info->cur_proc].p_stdout = pipes[1];
-  procs[info->cur_proc].my_pipe_other = pipes[0];
-  procs[info->cur_proc].num_components_job_name++;
-  info->last_sequence = PIPE;
-}
-
-_BOOL eRDR_SIN(){
-
-}
-
-_BOOL eRDR_SOT(){
-
-}
-
-_BOOL eRDR_SOT_A(){
-
-}
-
-_BOOL eANDIN(){
-
-}
-
-_BOOL eBACK_GR(){
-
-}
-
 
 
 /**
@@ -134,21 +98,8 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   while((cur_tkn = getToken(tkns,which))!=NULL){
       switch (*cur_tkn) {
         case PIPE:{
-          //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
-          if(info->cur_proc == -1 || info->continuing || procs[info->cur_proc].p_stdout!=-1 || info->pipe_present || *procs[info->cur_proc].background){
-            if(!embryo_clean(procs,info))
-              return FALSE;
-            errno = EINVAL;
+          if(!ePIPE(procs,info))
             return FALSE;
-          }
-          if(pipe(pipes) == -1)
-            return FALSE;
-          //start pipeline
-          procs[info->cur_proc].p_stdout = pipes[1];
-          info->pipe_present = TRUE;
-          procs[info->cur_proc].my_pipe_other = pipes[0]; //store the other end
-          if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = PIPE; errno =0; return FALSE;}
-
           which = CURR_TOKEN;
 
           break;

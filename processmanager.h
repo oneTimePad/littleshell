@@ -1,4 +1,5 @@
 #ifndef _PROCMAN
+#define _PROCMAN
 #include <limits.h>
 #define MAX_PROCESSES 500
 #define MAX_PROCESS_NAME 100
