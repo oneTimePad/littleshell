@@ -80,7 +80,50 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 }
 
 
+_BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
+  if(info->cur_proc+1 >= size){errno = ENOMEM; return FALSE;}
 
+  EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
+  new_proc->fork_seq = info->fork_seq; //set the fork sequence
+  new_proc->internal_command = FALSE;
+  //attempt to get the process name and check if it is in the path if necessary
+  if(strlen(cur_tkn)+1>PATH_LIM){
+    info->cur_proc-=1;
+    errno = ENOMEM;
+    return FALSE;
+  }
+  if(((strstr(cur_tkn,"/")!= NULL) ? strcpy(new_proc->program,cur_tkn) :( (inPath(cur_tkn,new_proc->program,PATH_LIM)&& inInternal(cur_tkn)==NONE) ? new_proc->program : NULL) ) ==NULL){
+    //it might be a command internal to the shell
+    short key;
+    if((key=inInternal(cur_tkn))!=NONE){
+      new_proc->internal_command = TRUE;
+      new_proc->internal_key = key;
+    }
+    else{
+        info->cur_proc-=1;
+        errno = ENOENT;
+        return FALSE;
+      }
+  }
+  new_proc->num_args = 0;
+  new_proc->my_pipe_other = -1;
+  new_proc->p_stdin = -1;
+  new_proc->p_stdout = -1;
+
+}
+
+_BOOL embryo_arg(EMBRYO *procs,EMBRYO_INFO *info, char *arg){
+  if(embryos[info->cur_proc].num_args == MAX_ARGUMENT || strlen(arg) + 1 > MAX_ARG_LEN){
+    info->cur_proc-=1;
+    errno = ENOMEM;
+    return FALSE;
+  }
+
+  EMBRYO *proc =  procs[info->cur_proc];
+  strcpy(proc->arguments[proc->num_args++],arg);
+  return TRUE;
+
+}
 
 
 /**
@@ -90,7 +133,7 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 * info: contains information about where to start( i.e to be used if we are continuing from a previous call to embryos_init)
 * returns: status, return FALSE and errno is set to EINVAL for bad syntax or 0 if we don't have enough info (i.e go back to shell)
 **/
-_BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
+_BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   if(info == NULL | tkns == NULL || procs == NULL) {errno = EFAULT; return FALSE;}
   char *cur_tkn;
   int which = CURR_TOKEN;

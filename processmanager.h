@@ -17,6 +17,7 @@
   #define FAIL_SIG SIGRTMIN+7
 #endif
 
+#define ARG -1
 
 extern const char * const sys_siglist[];
 
