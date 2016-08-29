@@ -143,7 +143,14 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
 
 }
 
+/**
+* add arguments to the current embryo, this is a special posthandler
+*procs: list of embryos
+* info: current context of embryos_init
+* arg: the argument to add
+**/
 _BOOL embryo_arg(EMBRYO *procs,EMBRYO_INFO *info, char *arg){
+  //check for overflow
   if(embryos[info->cur_proc].num_args == MAX_ARGUMENT || strlen(arg) + 1 > MAX_ARG_LEN){
     info->cur_proc-=1;
     errno = ENOMEM;
