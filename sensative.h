@@ -2,7 +2,10 @@
 #define SENSATIVE_H
 
 
+typedef  _BOOL (*prehandler) (EMBRYO *,EMBRYO_INFO *,char);
+typedef  _BOOL (*posthandler)(EMBRYO *,EMBRYO_INFO *,EMBRYO);
 
+ 
 
 
 _BOOL shell_pipe(EMBRYO *,EMBRYO_INFO *);
