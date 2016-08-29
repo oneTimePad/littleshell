@@ -79,7 +79,7 @@ int main(){
     EMBRYO_INFO info;
     memset(&info,0,sizeof(EMBRYO_INFO));
     info.cur_proc = -1;
-    info.fork_seq = 0;
+    info.fork_seq =  1;
     info.last_sequence = '\0';
     info.pipe_present = FALSE;
     info.continuing = FALSE;

@@ -19,19 +19,32 @@ Managers process data structure creation and clean up
 * determines if first char in str is a shell understood character
 * returns: TRUE if is, FALSE if not
 **/
-static _BOOL isSensitive(char *str){
+static char* internals[] ={
+  "","|",">",">>","<","&","&&",NULL
+};
+static int isSensitive(char *str){
   switch (*str) {
     case PIPE:
+      return 1;
+      break;
     case RDR_SOT:
+      return 2;
+      break;
     case RDR_SOT_A:
+      return 3;
+      break;
     case RDR_SIN:
     case RDR_SIN_A:
+      return 4;
+      break;
     case BACK_GR:
+      return 5;
+      break;
     case ANDIN:
-      return TRUE;
+      return 6;
       break;
     default:
-      return FALSE;
+      return 0;
       break;
   }
 }
@@ -66,6 +79,46 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
   return TRUE;
 }
 
+
+
+_BOOL ePIPE(EMBRYO *embryos,EMBRYO_INFO *info){
+  int pipes[2];
+  //invalid if : there is no current process, a pipe is already present, or the current process is backgrounded( i.e proc1 & | proc2 is invalid)
+  if(info->cur_proc == -1 || info->continuing|| procs[info->cur_proc].p_stdout!=-1 || info->last_sequence == PIPE || *procs[info->cur_proc].background){
+    errno = EINVAL;
+    return FALSE;
+  }
+  if(pipe(pipes) == -1)
+    return FALSE;
+  //start pipeline
+  procs[info->cur_proc].p_stdout = pipes[1];
+  procs[info->cur_proc].my_pipe_other = pipes[0];
+  procs[info->cur_proc].num_components_job_name++;
+  info->last_sequence = PIPE;
+}
+
+_BOOL eRDR_SIN(){
+
+}
+
+_BOOL eRDR_SOT(){
+
+}
+
+_BOOL eRDR_SOT_A(){
+
+}
+
+_BOOL eANDIN(){
+
+}
+
+_BOOL eBACK_GR(){
+
+}
+
+
+
 /**
 * attempts to form processes and their i/o connections from tkns
 * tkns: ptr to the TOKENS
@@ -77,7 +130,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   if(info == NULL | tkns == NULL || procs == NULL) {errno = EFAULT; return FALSE;}
   char *cur_tkn;
   int which = CURR_TOKEN;
-  int pipes[2];
+
   while((cur_tkn = getToken(tkns,which))!=NULL){
       switch (*cur_tkn) {
         case PIPE:{
@@ -97,6 +150,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence = PIPE; errno =0; return FALSE;}
 
           which = CURR_TOKEN;
+
           break;
         }
         case RDR_SIN:{
@@ -119,6 +173,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           if((fd = open(cur_tkn,O_RDONLY))==-1){return FALSE;}
           procs[info->cur_proc].p_stdin = fd;
           which = NEXT_TOKEN;
+          procs[info->cur_proc].num_components_job_name++;
           break;
         }
         case RDR_SIN_A:
@@ -132,6 +187,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
             errno = EINVAL;
             return FALSE;
           }
+
           char *rdr = cur_tkn;
           //possibly go back to shell to wait for file
           if((cur_tkn = getToken(tkns,NEXT_TOKEN)) == NULL){info->last_sequence =*rdr; errno = 0; return FALSE;}
@@ -145,6 +201,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           if((fd = open(cur_tkn,O_WRONLY | (RDR_SOT_A == *rdr) ? O_APPEND : 0 ))==-1){return FALSE;}
           procs[info->cur_proc].p_stdout = fd;
           which = NEXT_TOKEN;
+          procs[info->cur_proc].num_components_job_name++;
           break;
         }
         case BACK_GR:{
@@ -156,6 +213,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           }
           //set all processes in pipe to background
           *procs[info->cur_proc].background = TRUE;
+          info->fork_seq++;
           which = NEXT_TOKEN;
           break;
         }
@@ -183,7 +241,10 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
         }
         default:{ //create the process embryo entry
           if(info->cur_proc+1 >= size){errno = ENOMEM; return FALSE;}
+          if(info->cur_proc-1>=0){procs[info->cur_proc].num_components_job_name++;}
           EMBRYO * new_proc = &procs[++info->cur_proc]; //retrieve a new proc entry
+          new_proc->start_job_name = cur_tkn;
+          new_proc->null-terminated = 0;
           new_proc->fork_seq = info->fork_seq; //set the fork sequence
           new_proc->internal_command = FALSE;
           //attempt to get the process name and check if it is in the path if necessary
@@ -276,7 +337,7 @@ _BOOL embryo_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
 * err_ptr: used to return child errno to caller
 * returns: status if false and, if errno is 0, check err_ptr(child error), else the parent had an error
 **/
-_BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
+_BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,size_t num_embryos){
   int err_ind =0 ;
   errno = 0;
 
@@ -293,7 +354,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
 
 
   int index =0; //current embryo
-  int fork_seq = 0; //current set of forked processes
+  int fork_seq = cur_job_num; //current set of forked processes
 
   while(1){
     //used to communicate child errno and synchronize
@@ -431,7 +492,7 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
 
         //setup process entry
         int id;
-        if((id = process_init(pman,&embryos[index],pid)) == -1){
+        if((id = job_init(jman,&embryos[index],pid,cur_job_num)) == -1){
           kill(pid,SIGKILL);
           return FALSE;
         }
@@ -507,6 +568,26 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
 
 
 /**
+* associate process pid with a job
+**/.
+_BOOL process_init(JMANAGER *jman,pid_t pid){
+    if(jman->procs.lowest_pid == 0)
+      jman->procs.lowest_pid = pid;
+      //pid's always go up, so take the lowest pid and subtract
+    long index = (long) pid - (long)jman->procs.lowest_pid;
+    jman->procs.processes[index] = jman->current_job;
+    return TRUE:
+}
+
+/**
+* fetch unique job num this processes is associated with
+**/
+int  process_to_job(JMANAGER *jman,pid_t pid){
+    long index = (long)pid -(long)jman->procs.lowest_pid;
+    return jman->processes[index];
+}
+
+/**
 * initializes process in process table
 * pman: ptr to process manager
 * name: name of process image
@@ -514,31 +595,55 @@ _BOOL processes_init(PMANAGER *pman,EMBRYO *embryos,size_t num_embryos){
 * ground: process is fore or background
 * returns: status of success
 **/
-int process_init(PMANAGER *pman,EMBRYO *embryo,pid_t pid){
-
-  //look for unused process entry
-  int i =-1;
-  while((++i)<MAX_PROCESSES && pman->processpids[i]!=-1);
-  if(i<MAX_PROCESSES){
-    pman->err[i] = 0;
-    //set process image name
-    if(strlen(embryo->program)+1> MAX_PROCESSES)
-      return -1;
-    strcpy(pman->processnames[i],embryo->program);
-    pman->processpids[i] = pid;
-    pman->suspendedstatus[i] = FALSE;
-    if(!*embryo->background && pman->foreground_group == -1)
-      return -1;
-    //might be the first process in background group
-    if(*embryo->background && pman->background_group == -1){
-      pman->background_group = pid;
+int job_init(JMANAGER *jman,EMBRYO *embryo,pid_t pid){
+  int job = (int)((long)jman->current_job - (long)jman->lowest_pid);
+  //loop back around if job not found
+  if(job >= MAX_JOBS){
+    job = 0;
+    while(jobsnames[job++][0]!='\0'){
+        if(job == MAX_JOBS) //all job entries are in use
+          return -1; //should never happen
     }
-    //set process job group
-    if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
-      return -1;
+    jman->current_job = job - 1;
   }
-  else
+
+  //construct the job name string
+  if(jman->jobnames[job][0] == '\0'){
+    char * str =embryo->start_job_name;
+    int num_comp = embryo->num_components_job_name;
+    int num  = 0;
+    while(num<num_comp){
+      if(strlen(str)+3>=MAX_JOB_NAME){errno = ENOMEM; return FALSE;}
+      int i;
+      strcat(jman->jobsnames[job],((i=inInternal(str)) ? internals[i] : str);
+      if(num+1>=num_comp)
+        break;
+      strcat(jman->jobsnames[job]," ");
+      str = str + strlen(str);
+      num++;
+    }
+
+  }
+  else{
+    jman->p
+  }
+
+  //set process image name
+  if(strlen(embryo->program)+1> MAX_PROCESSES)
     return -1;
+  strcpy(pman->processnames[i],embryo->program);
+  pman->processpids[i] = pid;
+  pman->suspendedstatus[i] = FALSE;
+  if(!*embryo->background && pman->foreground_group == -1)
+    return -1;
+  //might be the first process in background group
+  if(*embryo->background && pman->background_group == -1){
+    pman->background_group = pid;
+  }
+  //set process job group
+  if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
+    return -1;
+
 
 
   return i;

@@ -1,9 +1,9 @@
 #ifndef _PROCMAN
-#define _PROCMAN
+#include <limits.h>
 #define MAX_PROCESSES 500
 #define MAX_PROCESS_NAME 100
 #define MAX_ARGUMENT 10
-#define MAX_ARG_LEN  100
+#define MAX_ARG_LEN  ARG_MAX
 #include "bool.h"
 #include "path.h"
 #include "tokenizer.h"
@@ -25,10 +25,14 @@ typedef struct _EMBRYO_PROCESS{
   char  program[PATH_LIM];
   char  arguments[MAX_ARGUMENT*MAX_ARG_LEN];
   int   num_args;
-  int p_stdin;
-  int p_stdout;
-  int fork_seq;
-  int my_pipe_other;
+  int   p_stdin;
+  int   p_stdout;
+  int   fork_seq; //unique job id
+
+  char  *start_job_name
+  int   num_components_job_name;
+
+  int   my_pipe_other;
   _BOOL *background;
   _BOOL internal_command;
   short internal_key;
@@ -44,22 +48,21 @@ typedef struct _EMBRYO_INFO{
   _BOOL continuing;
 } EMBRYO_INFO;
 
-// manages processes (forked processes)
-typedef struct _PMANAGER{
-  // contains the name of image process is running
-  char processnames[MAX_PROCESS_NAME][MAX_PROCESSES];
-  // contains a list of process pid's
-  pid_t processpids[MAX_PROCESSES];
-  // says if process is currently suspended
-  _BOOL suspendedstatus[MAX_PROCESSES];
-  //process group ids
-  pid_t foreground_group;
-  pid_t background_group;
-  int err[MAX_PROCESSES];
-  //return status of most recent foreground process
-  int recent_foreground_status;
+// contains informaiton about all jobs
+typedef struct _JMANAGER{
+  char jobnames[MAX_JOB_NAME][MAX_JOBS];
+  _BOOL suspendedstatus[MAX_JOBS];
+  int err[MAX_JOBS];
+  int recent_foreground_job_status;
+  int current_job;
+  PROCESSES procs;
+}JMANAGER;
 
-} PMANAGER;
+typedef _PROCESSES{
+  int processes[MAX_PROCESSES];
+  pid_t lowest_pid;
+} PROCESSES;
+
 
 //used for embryo processes
 _BOOL embryo_init(TOKENS *,EMBRYO *,size_t, EMBRYO_INFO *);
