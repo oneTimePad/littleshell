@@ -32,7 +32,7 @@ typedef struct _EMBRYO_INFO{
   int cur_proc; //index of current embryo
   char last_sequence; //last prehandler called
   char *err_character; //chracter sequence that caused an error (i.e syntax error or permission error)
-
+  JMANAGER *jman; //ptr to the job manager
   int fork_seq; //current process group for embryos
   char  forkseqname[MAX_JOB_NAME][MAX_JOBS]; // process group/job names for embryos
   _BOOL background[MAX_JOBS]; //status of background/foreground for embryos

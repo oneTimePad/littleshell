@@ -99,7 +99,7 @@ _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
   if(which == ANDIN)
     info->background[info->fork_seq-1] = TRUE;
 
-  info->fork_seq++;
+  info->fork_seq = find_empty_job(info->jman);
   info->background[info->fork_seq-1] = FALSE;
   info->last_sequence = which;
   return TRUE;

@@ -15,6 +15,143 @@
 Managers process data structure creation and clean up
 **/
 
+
+/**
+* initialize process table
+* pman: ptr to process manager structure
+* returns: status
+**/
+_BOOL job_manager_init(JMANAGER* pman){
+    if(pman == NULL) return FALSE;
+    int i =0;
+    for(;i<MAX_PROCESSES;i++){
+      pman->processpids[i]=-1;
+    }
+    pman->recent_foreground_status = 0;
+
+
+    //set tty for processes
+    int my_pid = getpid();
+    //put shell in foreground
+    tcsetpgrp(0,my_pid);
+    pman->foreground_group=my_pid;
+
+    return TRUE;
+}
+
+
+/**
+* returns an empty job's INDEX, add 1 to get the job number
+* jman: job manager
+* returns: job index, -1 on error
+**/
+int find_empty_job(JMANAGER *jman){
+  int job = jman->current_job;
+  while(jobsnames[job++][0]!='\0'){
+    if(job == jman->current_job){
+      errno = ENOMEM;
+      return -1;
+    }
+    else if(job == MAX_JOBS){
+      job = 0;
+    }
+  }
+  jman->current_job = job;
+  return job;
+}
+
+
+
+/**
+* fetch unique job num this processes is associated with
+**/
+int  process_to_job(JMANAGER *jman,pid_t pid){
+    long index = (long)pid -(long)jman->procs.lowest_pid;
+    return jman->processes[index];
+}
+
+
+
+
+/**
+* initializes process in process table
+* pman: ptr to process manager
+* name: name of process image
+* pid: process id
+* ground: process is fore or background
+* returns: status of success
+**/
+int job_init(JMANAGER *jman,EMBRYO *embryo,pid_t pid){
+  int job = (int)((long)jman->current_job - (long)jman->lowest_pid);
+  //loop back around if job not found
+  if(job >= MAX_JOBS){
+    job = 0;
+    while(jobsnames[job++][0]!='\0'){
+        if(job == MAX_JOBS) //all job entries are in use
+          return -1; //should never happen
+    }
+    jman->current_job = job - 1;
+  }
+
+  //construct the job name string
+  if(jman->jobnames[job][0] == '\0'){
+    char * str =embryo->start_job_name;
+    int num_comp = embryo->num_components_job_name;
+    int num  = 0;
+    while(num<num_comp){
+      if(strlen(str)+3>=MAX_JOB_NAME){errno = ENOMEM; return FALSE;}
+      int i;
+      strcat(jman->jobsnames[job],((i=inInternal(str)) ? internals[i] : str);
+      if(num+1>=num_comp)
+        break;
+      strcat(jman->jobsnames[job]," ");
+      str = str + strlen(str);
+      num++;
+    }
+
+  }
+  else{
+    jman->p
+  }
+
+  //set process image name
+  if(strlen(embryo->program)+1> MAX_PROCESSES)
+    return -1;
+  strcpy(pman->processnames[i],embryo->program);
+  pman->processpids[i] = pid;
+  pman->suspendedstatus[i] = FALSE;
+  if(!*embryo->background && pman->foreground_group == -1)
+    return -1;
+  //might be the first process in background group
+  if(*embryo->background && pman->background_group == -1){
+    pman->background_group = pid;
+  }
+  //set process job group
+  if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
+    return -1;
+
+
+
+  return i;
+}
+
+
+
+
+/**
+* clean up process entry on death
+* pman: ptr to process manager
+* proc_index: index in process table
+**/
+_BOOL process_destroy(PMANAGER *pman,int proc_index){
+
+  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
+  pman->processpids[proc_index] = -1;
+  pman->err[proc_index] = 0;
+  return TRUE;
+}
+
+
 /**
 * converts embryos into actual processes
 * pman: manager for processes
@@ -265,115 +402,6 @@ _BOOL process_init(JMANAGER *jman,pid_t pid){
     return TRUE:
 }
 
-/**
-* fetch unique job num this processes is associated with
-**/
-int  process_to_job(JMANAGER *jman,pid_t pid){
-    long index = (long)pid -(long)jman->procs.lowest_pid;
-    return jman->processes[index];
-}
-
-/**
-* initializes process in process table
-* pman: ptr to process manager
-* name: name of process image
-* pid: process id
-* ground: process is fore or background
-* returns: status of success
-**/
-int job_init(JMANAGER *jman,EMBRYO *embryo,pid_t pid){
-  int job = (int)((long)jman->current_job - (long)jman->lowest_pid);
-  //loop back around if job not found
-  if(job >= MAX_JOBS){
-    job = 0;
-    while(jobsnames[job++][0]!='\0'){
-        if(job == MAX_JOBS) //all job entries are in use
-          return -1; //should never happen
-    }
-    jman->current_job = job - 1;
-  }
-
-  //construct the job name string
-  if(jman->jobnames[job][0] == '\0'){
-    char * str =embryo->start_job_name;
-    int num_comp = embryo->num_components_job_name;
-    int num  = 0;
-    while(num<num_comp){
-      if(strlen(str)+3>=MAX_JOB_NAME){errno = ENOMEM; return FALSE;}
-      int i;
-      strcat(jman->jobsnames[job],((i=inInternal(str)) ? internals[i] : str);
-      if(num+1>=num_comp)
-        break;
-      strcat(jman->jobsnames[job]," ");
-      str = str + strlen(str);
-      num++;
-    }
-
-  }
-  else{
-    jman->p
-  }
-
-  //set process image name
-  if(strlen(embryo->program)+1> MAX_PROCESSES)
-    return -1;
-  strcpy(pman->processnames[i],embryo->program);
-  pman->processpids[i] = pid;
-  pman->suspendedstatus[i] = FALSE;
-  if(!*embryo->background && pman->foreground_group == -1)
-    return -1;
-  //might be the first process in background group
-  if(*embryo->background && pman->background_group == -1){
-    pman->background_group = pid;
-  }
-  //set process job group
-  if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
-    return -1;
-
-
-
-  return i;
-}
-
-
-
-/**
-* initialize process table
-* pman: ptr to process manager structure
-* returns: status
-**/
-_BOOL process_manager_init(PMANAGER* pman){
-    if(pman == NULL) return FALSE;
-    int i =0;
-    for(;i<MAX_PROCESSES;i++){
-      pman->processpids[i]=-1;
-    }
-    pman->foreground_group=-1;
-    pman->background_group=-1;
-    pman->recent_foreground_status = 0;
-
-
-    //set tty for processes
-    int my_pid = getpid();
-    //put shell in foreground
-    tcsetpgrp(0,my_pid);
-    pman->foreground_group=my_pid;
-
-    return TRUE;
-}
-
-/**
-* clean up process entry on death
-* pman: ptr to process manager
-* proc_index: index in process table
-**/
-_BOOL process_destroy(PMANAGER *pman,int proc_index){
-
-  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
-  pman->processpids[proc_index] = -1;
-  pman->err[proc_index] = 0;
-  return TRUE;
-}
 
 
 /**

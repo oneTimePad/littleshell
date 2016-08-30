@@ -22,6 +22,11 @@
 extern const char * const sys_siglist[];
 
 
+typedef _PROCESSES{
+  int processes[MAX_PROCESSES];
+  pid_t lowest_pid;
+} PROCESSES;
+
 // contains informaiton about all jobs
 typedef struct _JMANAGER{
   char jobnames[MAX_JOB_NAME][MAX_JOBS];
@@ -32,27 +37,7 @@ typedef struct _JMANAGER{
   PROCESSES procs;
 }JMANAGER;
 
-typedef _PROCESSES{
-  int processes[MAX_PROCESSES];
-  pid_t lowest_pid;
-} PROCESSES;
 
 
-//used for embryo processes
-_BOOL embryo_init(TOKENS *,EMBRYO *,size_t, EMBRYO_INFO *);
-_BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
-
-//used for forked processes
-_BOOL processes_init(PMANAGER *,EMBRYO *,size_t);
-int process_init(PMANAGER *,EMBRYO *,pid_t);
-_BOOL process_manager_init(PMANAGER *);
-_BOOL process_destroy(PMANAGER *,int);
-_BOOL process_wait_foreground(PMANAGER *);
-_BOOL process_reap(PMANAGER *);
-int   process_search(PMANAGER *,pid_t);
-_BOOL process_status(PMANAGER *,pid_t , int,_BOOL);
-_BOOL process_foreground(PMANAGER *,pid_t);
-_BOOL process_background(PMANAGER *pman, pid_t);
-_BOOL process_dump(PMANAGER *);
 
 #endif
