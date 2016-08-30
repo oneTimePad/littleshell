@@ -195,8 +195,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           if(info->cur_proc !=-1){
             //call the post handler
             if(!posthandler[(info->last_sequence*-1)](embryos,info,cur_tkn)){
-              if(errno == EINVAL)
-                info->err_character = cur_tkn;
+              info->err_character = cur_tkn;
               return FALSE;
             }
 
