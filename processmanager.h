@@ -17,39 +17,10 @@
   #define FAIL_SIG SIGRTMIN+7
 #endif
 
-#define ARG -1
+
 
 extern const char * const sys_siglist[];
 
-//used for storing info on a process to be created
-//an embryo process is one queued to be forked, but not yet forked
-typedef struct _EMBRYO_PROCESS{
-  char  program[PATH_LIM];
-  char  arguments[MAX_ARGUMENT*MAX_ARG_LEN];
-  char  forkseqname[MAX_JOB_NAME][MAX_JOBS];
-  int   num_args;
-  int   p_stdin;
-  int   p_stdout;
-  int   fork_seq; //unique job id
-
-  char  *start_job_name
-  int   num_components_job_name;
-
-  int   my_pipe_other;
-  _BOOL *background;
-  _BOOL internal_command;
-  short internal_key;
-
-} EMBRYO;
-
-//allows for embryo init to continue where left off
-typedef struct _EMBRYO_INFO{
-  int cur_proc;
-  _BOOL pipe_present;
-  int fork_seq;
-  char last_sequence;
-  _BOOL continuing;
-} EMBRYO_INFO;
 
 // contains informaiton about all jobs
 typedef struct _JMANAGER{
