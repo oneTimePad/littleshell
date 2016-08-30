@@ -65,18 +65,16 @@ _BOOL add_to_job_name(EMBRYO_INFO *info,char which){
 */
 _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
   if(info->cur_proc == -1)return TRUE;
-  if(info->pipe_present && procs[info->cur_proc-1].my_pipe_other!=-1){
-    if(close(procs[info->cur_proc].my_pipe_other)==-1)
+  if(info->pipe_present && procs[info->cur_proc-1].p_pipe_read!=-1){
+    if(close(procs[info->cur_proc].p_pipe_read)==-1)
       return FALSE;
     procs[info->cur_proc].p_stdout=-1;
   }
-  int num_procs = info->cur_proc+1;
+  int num_procs = info->cur_proc;
   int index = 0;
 
   for(;index < num_procs;index++){
-    if(index ==0 || (index!=0 && procs[index-1].fork_seq !=procs[index].fork_seq)){
-      free(procs[index].background);
-    }
+
     if(procs[index].p_stdout!=-1 && procs[index].my_pipe_other==-1){
       if(close(procs[index].p_stdout) == -1)
         return FALSE;
@@ -191,8 +189,11 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
 
   while((cur_tkn = getToken(tkns,which))!=NULL){
       switch (isSensitive(cur_tkn)) {
+        //if not a sensitive character
         case 0:{
+          //if there is at least 1 embryo already
           if(info->cur_proc !=-1){
+            //call the post handler
             if(!posthandler[(info->last_sequence*-1)](embryos,info,cur_tkn)){
               if(errno == EINVAL)
                 info->err_character = cur_tkn;
@@ -200,15 +201,19 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
             }
 
           }
+          //else we need to create at least one proc
+          //since there is no last_sequence yet
           else{
             if(!embryo_create(embryos,info,cur_tkn))
               return FALSE;
           }
           break;
         }
+        //is a sensitive char
         default:{
+          //call the prehandler based on the *cur_tkn, which sensitive char it is
           if(!prehandlers[(*cur_tkn * -1)](embryos,info,*cur_tkn)){
-            if(errno == EINVAL)
+            if(errno == EINVAL)//syntax error
               info->err_character = cur_tkn;
             return FALSE;
           }

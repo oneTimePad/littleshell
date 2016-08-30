@@ -2,7 +2,6 @@
 #define EMBRYO_H
 
 
-#define ARG 0
 
 
 

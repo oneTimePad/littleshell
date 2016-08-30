@@ -2,6 +2,8 @@
 #include "embryos.h"
 #include "sensative.h"
 
+//contains pre and post handlers for embryos_init
+
 static prehandler pre_handlers[] ={
   NULL,
   pre_pipe_handler,
@@ -45,7 +47,7 @@ _BOOL pre_pipe_handler(EMBRYO *procs,EMBRYO_INFO *info,char which){
     return FALSE;
   //bash chooses to ignore the pipe if stdout is redirected already, this shell follows that
   if(procs[info->cur_proc].p_stdout!=-1){
-    info->last_sequence = PIPE;
+    info->last_sequence = which;
     return TRUE;
   }
 
@@ -54,7 +56,7 @@ _BOOL pre_pipe_handler(EMBRYO *procs,EMBRYO_INFO *info,char which){
   //start pipeline
   procs[info->cur_proc].p_stdout = pipes[1];
   procs[info->cur_proc].p_pipe_read = pipes[0];
-  info->last_sequence = PIPE;
+  info->last_sequence = which;
   return TRUE;
 }
 
@@ -108,6 +110,7 @@ _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
 //post-handlers, executed when extra input is read in the from the shell and info->last_sequence specified a certain character
 
 /**
+* handlers the other end of the pipe, writes the read end to new proc
 * embryos: lsit of embryos
 * info: current context of embryos_init
 * name: next input after a certain last_sequence was seen
@@ -128,7 +131,13 @@ _BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, char *name){
 }
 
 
-
+/**
+* actually opens the file for redirecting i/o, changes the current embryos stdio
+* embryos: list of embryos
+* info: current context of embryos_init
+* name: the current token value
+* returns: status
+**/
 _BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
 
   int fd;
@@ -145,6 +154,13 @@ _BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
 
 }
 
+/**
+* just added for consistancy, just creates a new proc and resets last_sequence
+* ampersan doesn't actually have any post action
+* embryos: list of embryos
+* info: current context of embryos_init
+* name: current token value
+**/
 _BOOL post_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
   if(!embryo_create(embryos,info,name))
     return FALSE;
