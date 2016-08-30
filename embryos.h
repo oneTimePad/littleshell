@@ -2,7 +2,7 @@
 #define EMBRYO_H
 
 
-#define ARG -1
+#define ARG 0
 
 
 
@@ -32,8 +32,9 @@ typedef struct _EMBRYO_INFO{
   int cur_proc;
   int fork_seq;
   char  forkseqname[MAX_JOB_NAME][MAX_JOBS];
+  _BOOL background[MAX_JOBS];
   char last_sequence;
-  char err_character;
+  char *err_character;
 } EMBRYO_INFO;
 
 

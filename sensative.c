@@ -3,30 +3,42 @@
 
 
 static prehandler pre_handlers[] ={
+  NULL,
   pre_pipe_handler,
-  pre_redirstdin_handler,
-  pre_redirstdout_handler,
-  pre_background_handler,
-  pre_and_handler,
+  pre_redirio_handler,
+  pre_redirio_handler,
+  pre_redirio_handler,
+  pre_ampersan_handler,
+  pre_ampersan_handler,
   NULL
 };
 
 static posthandler post_handlers[] = {
+  NULL,
   post_pipe_handler,
-  post_redirstdin_handler,
-  post_redirstdout_handler,
+  post_redirio_handler,
+  post_redirio_handler,
+  pre_redirio_handler,
+  post_ampersan_handler,
+  pre_ampersan_handler,
   NULL
 };
 
+// pre- handlers, executed when a specific set of characters are specified in shell input
 
-
+/**
+* handles '|' when it is spotted, deals with first-prog in 'first-prog | second-prog'
+* procs: list of embryos
+* info: current embryo_init context
+* which: the '|' character, used for portability among other handlers that need it
+* returns: status
+**/
 _BOOL pre_pipe_handler(EMBRYO *procs,EMBRYO_INFO *info,char which){
   int pipes[2];
 
   //syntax error near  unexpected token ' '
-  if(info->cur_proc == -1 || info->last_sequence != '\0' || *procs[info->cur_proc].background){
+  if(info->cur_proc == -1 || info->last_sequence != '\0' || info->background[info->fork_seq]){
     errno = EINVAL;
-    info->err_character = which;
     return FALSE;
   }
   if(!add_to_job_name(info,which))
@@ -46,12 +58,17 @@ _BOOL pre_pipe_handler(EMBRYO *procs,EMBRYO_INFO *info,char which){
   return TRUE;
 }
 
-
+/**
+* handles i/o redirection characters when they occur
+* embryos: list of embryos
+* info: current context of embryos_init
+* which: the i/o redir character
+* returns: status
+**/
 _BOOL pre_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info,char which){
   //syntax error near  unexpected token ' '
   if(info->cur_proc == -1 || info->last_sequence != '\0'){
     errno = EINVAL;
-    info->err_character = which;
     return FALSE;
   }
   if(!add_to_job_name(info,which))
@@ -61,47 +78,76 @@ _BOOL pre_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info,char which){
   return TRUE;
 }
 
+/**
+* handlers ampersan characters i.e '&' and '&&' when they occur
+* embryos: list of embryos
+* info: current context of embryos_init
+* which: the ampersan character & or &&
+* returns: status
+**/
 _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
   //syntax error near  unexpected token ' '
   if(info->cur_proc == -1 || info->last_sequence != '\0'){
     errno = EINVAL;
-    info->err_character = which;
     return FALSE;
   }
   if(!add_to_job_name(info,which))
     return FALSE;
   //set all processes in pipe to background
   if(which == ANDIN)
-    *procs[info->cur_proc].background = TRUE;
+    info->background[info->fork_seq-1] = TRUE;
+
   info->fork_seq++;
+  info->background[info->fork_seq-1] = FALSE;
   info->last_sequence = which;
   return TRUE;
 }
 
 
 
+//post-handlers, executed when extra input is read in the from the shell and info->last_sequence specified a certain character
 
-_BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, EMBRYO *new_proc){
-  if(!embryo_create(embryos,info))
+/**
+* embryos: lsit of embryos
+* info: current context of embryos_init
+* name: next input after a certain last_sequence was seen
+* returns: status
+**/
+_BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, char *name){
+  //create a new embryo
+  if(!embryo_create(embryos,info,name))
     return FALSE;
+  //if i/o redir occured and then there is a pipe bash ignores the pipe, this shell does too
   if(embryos[info->cur_proc-1].p_pipe_read == -1){
     info->last_sequence = '\0';
     return TRUE;
   }
-  embryos[info->cur_proc].background = embryos[info->cur_proc-1].background;
+  //change stdin to pipe read
   embryos[info->cur_proc].p_stdin = embryos[info->cur_proc-1].p_pipe_read;
   return TRUE;
 }
 
 
 
-_BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info){
+_BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
 
+  int fd;
+  if((fd = open(name, (info->last_sequence==RDR_SIN)? O_RDONLY :O_WRONLY | (info->last_sequence==RDR_SOT_A) ? O_APPEND : 1) ) == -1){
+    return FALSE;
+  }
+
+  if(info->last_sequence == RDR_SIN)
+    embryos[info->cur_proc].p_stdin = fd;
+  else
+    embryos[info->cur_proc].p_stdout = fd;
+
+  return TRUE;
 
 }
 
-
-
-_BOOL post_redirstdout_handler(EMBRYO *embryos, EMBRYO_INFO *info, EMBRYO *new_proc){
-
+_BOOL post_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
+  if(!embryo_create(embryos,info,name))
+    return FALSE;
+  info->last_sequence = '\0';
+  return TRUE;
 }
