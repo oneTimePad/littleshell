@@ -1,6 +1,6 @@
 
-
-
+#include "embryos.h"
+#include "sensative.h"
 
 static prehandler pre_handlers[] ={
   NULL,
@@ -14,7 +14,7 @@ static prehandler pre_handlers[] ={
 };
 
 static posthandler post_handlers[] = {
-  NULL,
+  embryo_arg,
   post_pipe_handler,
   post_redirio_handler,
   post_redirio_handler,

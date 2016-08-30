@@ -1,12 +1,14 @@
-
-
-
-
-
-
-
-
-
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <fcntl.h>
+#include "internal.h"
+#include "errors.h"
+#include "embryos.h"
 
 
 /**
@@ -188,14 +190,36 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
   int which = CURR_TOKEN;
 
   while((cur_tkn = getToken(tkns,which))!=NULL){
+      switch (isSensitive(cur_tkn)) {
+        case 0:{
+          if(info->cur_proc !=-1){
+            if(!posthandler[(info->last_sequence*-1)](embryos,info,cur_tkn)){
+              if(errno == EINVAL)
+                info->err_character = cur_tkn;
+              return FALSE;
+            }
 
-    //replace these with function pointers
-    //for prehandlers
-    //certain handlers can choose to get the current process
-    //or create a new owner
-      switch (*cur_tkn) {
-        
+          }
+          else{
+            if(!embryo_create(embryos,info,cur_tkn))
+              return FALSE;
+          }
+          break;
+        }
+        default:{
+          if(!prehandlers[(*cur_tkn * -1)](embryos,info,*cur_tkn)){
+            if(errno == EINVAL)
+              info->err_character = cur_tkn;
+            return FALSE;
+          }
+          break;
+        }
       }
+  }
+
+  if(info->last_sequence != '\0'){
+    errno = 0;
+    return FALSE;
   }
 
   return TRUE;
