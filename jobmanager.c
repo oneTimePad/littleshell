@@ -246,6 +246,10 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
 _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embryos){
   int err_ind =0 ;
   errno = 0;
+  if(num_embryos <=0){
+    errno = EINVAL;
+    return FALSE;
+  }
 
   //create blockset for waiting, emptyset for restoring child
   sigset_t blockset,emptyset;
@@ -260,211 +264,212 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
 
 
   int index =0; //current embryo
-  int fork_seq = cur_job_num; //current set of forked processes
-
-  while(1){
-    //used to communicate child errno and synchronize
-    int pipes[2];
-    if(pipe(pipes) == -1)
-      return FALSE;
-
-    pid_t pid;
-    switch ((pid=fork())) {
-      //internal error
-      case -1:{
+  int fork_seq = embryos[index].fork_seq; //current set of forked processes
+  _BOOL end = FALSE;
+  while(!end){
+    _BOOL set = FALSE;
+    while(index<num_embryos && embryos[index].fork_seq == fork_seq){
+      //used to communicate child errno and synchronize
+      int pipes[2];
+      if(pipe(pipes) == -1)
         return FALSE;
-        break;
-      }
-      //child
-      case 0:{
-        //close read end (not needed)
-        if(close(pipes[0]) == -1)
-          chldExit(errno);
-        //make write end CLOEXEC to determine if execed worked
-        if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
-          chldExit(errno);
 
-        //duplicate stdin if necessary
-        int fd_in;
-        if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
-          if(dup2(fd_in,STDIN_FILENO) == -1)
-            chldExit(errno);
-          if(close(fd_in) == -1)
-            chldExit(errno);
+      pid_t pid;
+      switch ((pid=fork())) {
+        //internal error
+        case -1:{
+          return FALSE;
+          break;
         }
-
-        //duplicate stdout if necessary
-        int fd_out;
-        if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
-          if(dup2(fd_out,STDOUT_FILENO) == -1)
+        //child
+        case 0:{
+          //close read end (not needed)
+          if(close(pipes[0]) == -1)
             chldExit(errno);
-          if(close(fd_out) == -1)
+          //make write end CLOEXEC to determine if execed worked
+          if(fcntl(pipes[1],F_SETFD,FD_CLOEXEC) == -1)
             chldExit(errno);
-        }
 
-        //create the args list
-        char *args[embryos[index].num_args];
-        args[0] = embryos[index].program;
-        int args_index =1;
-        char *arguments = embryos[index].arguments;
-        for(;args_index<embryos[index].num_args;args_index++){
-          args[args_index] = arguments;
-          arguments = arguments+strlen(arguments)+1;
-        }
-        args[args_index] = NULL;
+          //duplicate stdin if necessary
+          int fd_in;
+          if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
+            if(dup2(fd_in,STDIN_FILENO) == -1)
+              chldExit(errno);
+            if(close(fd_in) == -1)
+              chldExit(errno);
+          }
 
-        //sigaction for dfl actions
-        struct sigaction dfl_action;
-        dfl_action.sa_handler = SIG_DFL;
-        if(sigemptyset(&dfl_action.sa_mask) == -1)
-          chldExit(errno);
-        dfl_action.sa_flags = 0;
+          //duplicate stdout if necessary
+          int fd_out;
+          if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
+            if(dup2(fd_out,STDOUT_FILENO) == -1)
+              chldExit(errno);
+            if(close(fd_out) == -1)
+              chldExit(errno);
+          }
 
-        //sync with parent
-        union sigval val;
-        val.sival_int = -1; //unused
-        sigqueue(getppid(),SYNC_SIG,val);
+          //create the args list
+          char *args[embryos[index].num_args];
+          args[0] = embryos[index].program;
+          int args_index =1;
+          char *arguments = embryos[index].arguments;
+          for(;args_index<embryos[index].num_args;args_index++){
+            args[args_index] = arguments;
+            arguments = arguments+strlen(arguments)+1;
+          }
+          args[args_index] = NULL;
 
-        //wait for parent to finish process entry creation
-        siginfo_t info;
-        sigwaitinfo(&blockset,&info);
+          //sigaction for dfl actions
+          struct sigaction dfl_action;
+          dfl_action.sa_handler = SIG_DFL;
+          if(sigemptyset(&dfl_action.sa_mask) == -1)
+            chldExit(errno);
+          dfl_action.sa_flags = 0;
+
+          //sync with parent
+          union sigval val;
+          val.sival_int = -1; //unused
+          sigqueue(getppid(),SYNC_SIG,val);
+
+          //wait for parent to finish process entry creation
+          siginfo_t info;
+          sigwaitinfo(&blockset,&info);
 
 
-        if(info.si_signo != SYNC_SIG)
-          chldPipeExit(pipes[1],-1);//something very very...bad happened
+          if(info.si_signo != SYNC_SIG)
+            chldPipeExit(pipes[1],-1);//something very very...bad happened
 
-        //restore signal mask
-        if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
-          chldPipeExit(pipes[1],errno);
-        //restore signal dispositions
-        if(sigaction(SIGINT,&dfl_action,NULL) == -1)
-          chldPipeExit(pipes[1],errno);
-        if(sigaction(SIGQUIT,&dfl_action,NULL) == -1)
-          chldPipeExit(pipes[1],errno);
-        if(sigaction(SIGTSTP,&dfl_action,NULL) == -1)
-          chldPipeExit(pipes[1],errno);
-
-        if(!embryos[index].internal_command){
-          //exec
-          execv(args[0],args);
-          //exec failed notify parent and exit
-          chldPipeExit(pipes[1],errno);
-        }
-        else{
-          //run internal command
-          errno = 0;
-          if(!execute_internal(pipes[1],embryos[index].internal_key,pman,args))
+          //restore signal mask
+          if(sigprocmask(SIG_SETMASK,&emptyset,NULL) == -1)
+            chldPipeExit(pipes[1],errno);
+          //restore signal dispositions
+          if(sigaction(SIGINT,&dfl_action,NULL) == -1)
+            chldPipeExit(pipes[1],errno);
+          if(sigaction(SIGQUIT,&dfl_action,NULL) == -1)
+            chldPipeExit(pipes[1],errno);
+          if(sigaction(SIGTSTP,&dfl_action,NULL) == -1)
             chldPipeExit(pipes[1],errno);
 
-        }
+          if(!embryos[index].internal_command){
+            //exec
+            execv(args[0],args);
+            //exec failed notify parent and exit
+            chldPipeExit(pipes[1],errno);
+          }
+          else{
+            //run internal command
+            errno = 0;
+            if(!execute_internal(pipes[1],embryos[index].internal_key,pman,args))
+              chldPipeExit(pipes[1],errno);
 
-        break;
-      }
-      //parent
-      default:{
+          }
 
-        //whether this part happens before or after child doesn't matter
-        //close unused write end
-        if(close(pipes[1]) == -1){
-          kill(pid,SIGKILL);
-          return FALSE;
+          break;
         }
-        //close unused fd
-        int fd_in;
-        if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
-          if(close(fd_in) == -1){
+        //parent
+        default:{
+
+          //whether this part happens before or after child doesn't matter
+          //close unused write end
+          if(close(pipes[1]) == -1){
             kill(pid,SIGKILL);
             return FALSE;
           }
-        }
-        //close unused fd
-        int fd_out;
-        if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
-          if(close(fd_out) == -1){
-            kill(pid,SIGKILL);
-            return FALSE;
-          }
-        }
-
-        ///wait for child to do preliminary setups
-        //protect against race
-        siginfo_t info;
-        sigwaitinfo(&blockset,&info);
-        //something went wrong, child died
-        if(info.si_signo!=SYNC_SIG){
-          errno = info.si_int; //give caller errno number
-          return FALSE;
-        }
-
-        //setup process entry
-        int id;
-        if((id = job_init(jman,&embryos[index],pid,cur_job_num)) == -1){
-          kill(pid,SIGKILL);
-          return FALSE;
-        }
-        //notify child
-        if(kill(pid,SYNC_SIG) == -1){
-          kill(pid,SIGKILL);
-          return FALSE;
-        }
-        //synchronize again
-        //wait for pipe write end to close/or have something
-        int err;
-        switch (read(pipes[0],&err,sizeof(err))) {
-          //something really really bad happened
-          case -1:{
-            kill(pid,SIGKILL);
-            close(pipes[0]);
-            return FALSE;
-          }
-          //exec worked everything is fine
-          case 0:{
-            if(close(pipes[0]) == -1)
+          //close unused fd
+          int fd_in;
+          if((fd_in=embryos[index].p_stdin) !=-1 && fd_in != STDIN_FILENO){
+            if(close(fd_in) == -1){
+              kill(pid,SIGKILL);
               return FALSE;
-
-            err_ind = 0; //reset if some proc in the current fork seq succeeded
-            break;
+            }
           }
-          //exec failed errno is in pipe (child died)
-          default:{
-            if(close(pipes[0]) == -1)
+          //close unused fd
+          int fd_out;
+          if((fd_out=embryos[index].p_stdout) !=-1 && fd_out != STDOUT_FILENO){
+            if(close(fd_out) == -1){
+              kill(pid,SIGKILL);
               return FALSE;
-            pman->err[id] = err;
-            //notify caller of error
-            err_ind = fork_seq; //a proc in the current fork seq failed
-            break;
+            }
           }
+
+          ///wait for child to do preliminary setups
+          //protect against race
+          siginfo_t info;
+          sigwaitinfo(&blockset,&info);
+          //something went wrong, child died
+          if(info.si_signo!=SYNC_SIG){
+            errno = info.si_int; //give caller errno number
+            return FALSE;
+          }
+
+          //setup process entry
+          if(!set){
+            strcpy(jman->jobnames[fork_seq-1],info->forkseqname[fork_seq-1]);
+            jman->jobpgrids[fork_seq-1] = pid;
+            setpgid(pid,pid);
+            set = TRUE;
+          }
+          else{
+            setpgid(pid,jman->jobpgrids[fork_seq-1]);
+          }
+
+
+          //notify child
+          if(kill(pid,SYNC_SIG) == -1){
+            kill(pid,SIGKILL);
+            return FALSE;
+          }
+          //synchronize again
+          //wait for pipe write end to close/or have something
+          int err;
+          switch (read(pipes[0],&err,sizeof(err))) {
+            //something really really bad happened
+            case -1:{
+              kill(pid,SIGKILL);
+              close(pipes[0]);
+              return FALSE;
+            }
+            //exec worked everything is fine
+            case 0:{
+              if(close(pipes[0]) == -1)
+                return FALSE;
+
+              err_ind = 0; //reset if some proc in the current fork seq succeeded
+              break;
+            }
+            //exec failed errno is in pipe (child died)
+            default:{
+              if(close(pipes[0]) == -1)
+                return FALSE;
+              jman->err[fork_seq-1] = err;
+              //notify caller of error
+              err_ind = fork_seq; //a proc in the current fork seq failed
+              break;
+            }
+          }
+          break;
         }
-        break;
       }
+
+      index++;
     }
 
+    if(!info->background[fork_seq-1]){
+      if(!process_wait_foreground(jman,fork_seq))
+        return FALSE;
+    }
 
     //if there are more embryos
-    if(index+1<num_embryos){
-      //is the next embryo in the same fork seq?
-      if(embryos[index+1].fork_seq!=fork_seq){
-          //if not wait for the current foreground group
-          if(!*embryos[index].background){
-            if(!process_wait_foreground(pman))
-              return FALSE;
-          }
-          //whether the proc is background or not doesn't matter since having a & before an && is invalid syntax
-          if(err_ind != 0) // the last fork_seq needs to succeed to move on
-            return FALSE; //if this is true we can't continue
-          //update for_seq for next time
-          fork_seq++;
-      }
+    if(index<num_embryos){
+        //if not wait for the current foreground group
+        //whether the proc is background or not doesn't matter since having a & before an && is invalid syntax
+        if(err_ind != 0) // the last fork_seq needs to succeed to move on
+          return FALSE; //if this is true we can't continue
+        //update for_seq for next time
+        fork_seq = embryos[index].fork_seq;
     }
-    //no more embryos, just wait for the foreground group and return
-    else{ //whether there is an error or not we leave
-      if(!*embryos[index].background){
-        if(!process_wait_foreground(pman))
-          return FALSE;
-
-      }
-
-      break;
+    else{
+      end = TRUE;
     }
 
   }

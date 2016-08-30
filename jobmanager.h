@@ -28,7 +28,7 @@ typedef struct _JMANAGER{
   pid_t jobpgrids[MAX_JOBS];
   pid_t lastprocpid[MAX_JOBS]
   _BOOL suspendedstatus[MAX_JOBS];
-  int err[MAX_JOBS];
+  int err[MAX_JOBS][MAX_JOBS];
   int recent_foreground_job_status;
   int current_job;
 }JMANAGER;
