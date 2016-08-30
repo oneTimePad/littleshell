@@ -12,7 +12,7 @@
 
 
 /**
-Managers process data structure creation and clean up
+Manages job creation and clean up
 **/
 
 
@@ -21,33 +21,28 @@ Managers process data structure creation and clean up
 * pman: ptr to process manager structure
 * returns: status
 **/
-_BOOL job_manager_init(JMANAGER* pman){
-    if(pman == NULL) return FALSE;
+_BOOL job_manager_init(JMANAGER* jman){
+    if(jman == NULL) return FALSE;
+    memset(jman,0,sizeof(JMANAGER));
+
     int i =0;
-    for(;i<MAX_PROCESSES;i++){
-      pman->processpids[i]=-1;
+    for(;i<MAX_JOBS;i++){
+      jman->jobpgrids[i]=-1;
     }
-    pman->recent_foreground_status = 0;
-
-
-    //set tty for processes
-    int my_pid = getpid();
-    //put shell in foreground
-    tcsetpgrp(0,my_pid);
-    pman->foreground_group=my_pid;
+    jman->recent_foreground_status = 0;
 
     return TRUE;
 }
 
 
 /**
-* returns an empty job's INDEX, add 1 to get the job number
+* returns an empty job's INDEX+1, add 1 to get the job number
 * jman: job manager
-* returns: job index, -1 on error
+* returns: job index +1, -1 on error
 **/
 int find_empty_job(JMANAGER *jman){
   int job = jman->current_job;
-  while(jobsnames[job++][0]!='\0'){
+  while(jman->jobpgrids!=-1){
     if(job == jman->current_job){
       errno = ENOMEM;
       return -1;
@@ -57,20 +52,133 @@ int find_empty_job(JMANAGER *jman){
     }
   }
   jman->current_job = job;
-  return job;
+  return job+1;
+}
+
+
+/**
+* wait on the foreground process group
+**/
+_BOOL job_wait_foreground(JMANAGER *jman, int job){
+  if(job == -1){errno = EINVAL; return FALSE;} //never happens
+  pid_t pgid = jman->jobpgrids[job-1];
+  int status;
+  pid_t pid;
+  //wait for all processes in the foreground group
+  while((pid = waitpid(-1*job,&status,WUNTRACED))!=-1);
+  job_status(jman,job,status,FALSE);
+  return TRUE;
+}
+
+/**
+* looks for job status changes
+* pman: ptr to job manager
+* returns: status
+**/
+_BOOL job_reap(JMANAGER *jman){
+  int status; //status returned by waitpid
+  pid_t pid; // pid returned by waitpid
+  pid_t pgid; //pgid to wait on
+  int job =1;
+  //loop though all jobs
+  for(;job<=MAX_JOBS; job++){
+    int tmp_status; // status returned by waitpid
+    pid_t tmp_pid =-1; //pid returned by waitpid
+    //if a job is active
+    if((pgid=jman->jobpgrids[job-1])!=-1){
+      errno = 0;
+      //check if any procs in that job have changed status
+      while((tmp_pid = waitpid(-1*pgid,&tmp_status,WNOHANG | WUNTRACED | WCONTINUED)) !=0 && tmp_pid!=-1){
+        status = tmp_status; //store the last status
+        pid = tmp_pid; //this is needed since all procs have been stopped -1 will never be returned
+                      //this checks if a proc was returned at some point
+      }
+      if(errno == ECHILD || pid != -1){ //no more procs left or proceses were stopped or continued
+        job_status(jman,job,status,TRUE);
+      }
+      else if(errno !=ECHILD && errno != 0 && tmp_pid==-1)
+        return FALSE; //an error
+    }
+  }
+
+  return TRUE;
 }
 
 
 
 /**
-* fetch unique job num this processes is associated with
+* parses processes wait status when it is cleaned up
+* pman: process manager
+* job: pid of job that completed
+* status: status from waiting on that job
+* done_print: whether to print (DONE) for finished process
+* returns: status
 **/
-int  process_to_job(JMANAGER *jman,pid_t pid){
-    long index = (long)pid -(long)jman->procs.lowest_pid;
-    return jman->processes[index];
+_BOOL job_status(JMANAGER *pman,int job, int status,_BOOL done_print){
+  errno = 0;
+
+  //job failed to be started with some error(print it)
+  if(jman->err[job-1]!=0){
+    errno = jman->err[job-1];
+    perror(jman->jobnames[index]);
+    errno = 0;
+    job_destroy(jman,job);
+    return TRUE;
+  }
+  //if process was suspended
+  if(WIFSTOPPED(status)){
+    //if it was the cause of ctl-Z
+    jman->suspendedstatus[job-1]=TRUE;
+    printf("Stopped                   %s",pman->processnames[index]);
+  }
+  //if process was killed by a signal
+  else if(WIFSIGNALED(status)){
+
+    //if it was SIGKILL, print the killed msg
+    if(WTERMSIG(status) == SIGKILL){
+      printf("Killed                  %s",pman->processnames[index]);
+    }
+    //convert signal to strmsg
+    char *str_sig;
+    if((str_sig=strsignal(WTERMSIG(status))) == NULL)
+      return FALSE;
+    else
+      printf("%s ",str_sig);
+    //notify of core dump
+    #ifdef WCOREDUMP
+    if(WCOREDUMP(status))
+      printf("(core dumped)");
+    #endif
+    //clean up process entry
+    job_destroy(jman,job);
+
+  }
+  //if a process was continued without the use of fg
+  //then it must be backgrounded
+  else if(WIFCONTINUED(status)){
+    jman->suspendedstatus[index] = TRUE;
+    printf("Continued                %s",pman->processnames[index]);
+  }
+  //process just exited
+  else if(WIFEXITED(status) && done_print){
+    printf("DONE                     %s",pman->processnames[index]);
+    //clean up process entry
+    process_destroy(pman,index);
+  }
+
+  printf("\n");
+
+
+
 }
 
 
+_BOOL job_destroy(JMANAGER *jman, int job){
+  memset(jman->jobsnames[job-1],0,MAX_JOB_NAME);
+  jman->jobpgrids[job-1] = -1;
+  jman->err[job-1] = 0;
+
+}
 
 
 /**
@@ -404,120 +512,6 @@ _BOOL process_init(JMANAGER *jman,pid_t pid){
 
 
 
-/**
-* wait on the foreground process group
-**/
-_BOOL process_wait_foreground(PMANAGER *pman){
-  if(pman->foreground_group == -1){errno = EINVAL; return FALSE;} //never happens
-
-  int status;
-  pid_t job;
-  //wait for all processes in the foreground group
-  while((job = waitpid(-1*pman->foreground_group,&status,WUNTRACED))!=-1)
-    process_status(pman,job,status,FALSE);
-  return TRUE;
-}
-
-/**
-* looks for process status changes and failures
-* pman: ptr to process manager
-* returns: status
-**/
-_BOOL process_reap(PMANAGER *pman){
-  int status;
-  pid_t job;
-  //poll for processes with status changes
-  while((job = waitpid(-1,&status,WNOHANG | WUNTRACED | WCONTINUED))!=0 && job!=-1){
-      process_status(pman,job,status,TRUE);
-  }
-
-  if(errno != ECHILD && errno !=0)
-    return FALSE; //something bad happened
-
-  return TRUE;
-}
-
-/**
-* get the index of process with pid job
-* pman: process manager
-* job: pid of job to search for
-* returns: index on success, -1 on error
-**/
-int process_search(PMANAGER *pman,pid_t job){
-  int i =0;
-  while(i++<MAX_PROCESSES&&pman->processpids[i]!=job);
-  return (i<MAX_PROCESSES) ? i : -1;
-}
-
-
-/**
-* parses processes wait status when it is cleaned up
-* pman: process manager
-* job: pid of job that completed
-* status: status from waiting on that job
-* done_print: whether to print (DONE) for finished process
-* returns: status
-**/
-_BOOL process_status(PMANAGER *pman,pid_t job, int status,_BOOL done_print){
-  int index = process_search(pman,job);
-  if(index == -1) return FALSE;
-  errno = 0;
-
-  //if process failed to be started with some error(print it)
-  if(pman->err[index]!=0){
-    errno = pman->err[index];
-    perror(pman->processnames[index]);
-    errno = 0;
-    process_destroy(pman,index);
-    return TRUE;
-  }
-  //if process was suspended
-  if(WIFSTOPPED(status)){
-    //if it was the cause of ctl-Z
-    pman->suspendedstatus[index]=TRUE;
-    printf("Stopped                   %s",pman->processnames[index]);
-  }
-  //if process was killed by a signal
-  else if(WIFSIGNALED(status)){
-
-    //if it was SIGKILL, print the killed msg
-    if(WTERMSIG(status) == SIGKILL){
-      printf("Killed                  %s",pman->processnames[index]);
-    }
-    //convert signal to strmsg
-    char *str_sig;
-    if((str_sig=strsignal(WTERMSIG(status))) == NULL)
-      return FALSE;
-    else
-      printf("%s ",str_sig);
-    //notify of core dump
-    #ifdef WCOREDUMP
-    if(WCOREDUMP(status))
-      printf("(core dumped)");
-    #endif
-    //clean up process entry
-    process_destroy(pman,index);
-
-  }
-  //if a process was continued without the use of fg
-  //then it must be backgrounded
-  else if(WIFCONTINUED(status)){
-    pman->suspendedstatus[index] = TRUE;
-    if(setpgid(job,pman->background_group))
-    printf("Continued                %s",pman->processnames[index]);
-  }
-  //process just exited
-  else if(WIFEXITED(status) && done_print){
-    printf("DONE                     %s",pman->processnames[index]);
-    //clean up process entry
-    process_destroy(pman,index);
-  }
-
-  printf("\n");
-
-
-
-}
 
 
 /**
