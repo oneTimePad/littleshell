@@ -21,7 +21,7 @@ Manages job creation and clean up
 * pman: ptr to process manager structure
 * returns: status
 **/
-_BOOL job_manager_init(JMANAGER* jman){
+_BOOL job_manager_init(JMANAGER *jman){
     if(jman == NULL) return FALSE;
     memset(jman,0,sizeof(JMANAGER));
 
@@ -58,6 +58,9 @@ int find_empty_job(JMANAGER *jman){
 
 /**
 * wait on the foreground process group
+* jman: job manager
+* job: job to wait on
+* returns: status
 **/
 _BOOL job_wait_foreground(JMANAGER *jman, int job){
   if(job == -1){errno = EINVAL; return FALSE;} //never happens
@@ -66,7 +69,9 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
   pid_t pid;
   //wait for all processes in the foreground group
   while((pid = waitpid(-1*job,&status,WUNTRACED))!=-1);
-  job_status(jman,job,status,FALSE);
+  if(!job_status(jman,job,status,FALSE))
+    return FALSE;
+
   return TRUE;
 }
 
@@ -114,7 +119,7 @@ _BOOL job_reap(JMANAGER *jman){
 * done_print: whether to print (DONE) for finished process
 * returns: status
 **/
-_BOOL job_status(JMANAGER *pman,int job, int status,_BOOL done_print){
+_BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
   errno = 0;
 
   //job failed to be started with some error(print it)
@@ -122,49 +127,69 @@ _BOOL job_status(JMANAGER *pman,int job, int status,_BOOL done_print){
     errno = jman->err[job-1];
     perror(jman->jobnames[index]);
     errno = 0;
-    job_destroy(jman,job);
+    if(!job_destroy(jman,job))
+      return FALSE;
     return TRUE;
   }
-  //if process was suspended
+  //if job was suspended
   if(WIFSTOPPED(status)){
     //if it was the cause of ctl-Z
     jman->suspendedstatus[job-1]=TRUE;
-    printf("Stopped                   %s",pman->processnames[index]);
+    printf("[%d]  Stopped                   %s",job,jman->jobnames[job-1]);
+    if(!ground)
+      jman->recent_foreground_status = WSTOPSIG(status);
   }
-  //if process was killed by a signal
-  else if(WIFSIGNALED(status)){
+  //if process was killed by a signal and backgrounded
+  else if(WIFSIGNALED(status) && ground){
 
     //if it was SIGKILL, print the killed msg
-    if(WTERMSIG(status) == SIGKILL){
-      printf("Killed                  %s",pman->processnames[index]);
-    }
-    //convert signal to strmsg
     char *str_sig;
     if((str_sig=strsignal(WTERMSIG(status))) == NULL)
       return FALSE;
-    else
-      printf("%s ",str_sig);
-    //notify of core dump
+    char *str_core = "";
     #ifdef WCOREDUMP
     if(WCOREDUMP(status))
-      printf("(core dumped)");
+      str_core = "(core dumped)";
     #endif
+    printf("[%d]  %s %s                  %s",job,str_sig,str_core,jman->jobnames[job-1]);
+    //convert signal to strmsg
+
     //clean up process entry
-    job_destroy(jman,job);
+    if(!job_destroy(jman,job))
+      return FALSE;
 
   }
-  //if a process was continued without the use of fg
-  //then it must be backgrounded
-  else if(WIFCONTINUED(status)){
-    jman->suspendedstatus[index] = TRUE;
-    printf("Continued                %s",pman->processnames[index]);
-  }
-  //process just exited
-  else if(WIFEXITED(status) && done_print){
-    printf("DONE                     %s",pman->processnames[index]);
+
+  else if(WIFSIGNALED(status)){
+    char *str_sig;
+    if((str_sig=strsignal(WTERMSIG(status))) == NULL)
+      return FALSE;
+    char *str_core = "";
+    #ifdef WCOREDUMP
+    if(WCOREDUMP(status))
+      str_core = "(core dumped)";
+    #endif
+    printf("%s %s",str_sig,str_core);
+    //convert signal to strmsg
+    jman->recent_foreground_status = WTERMSIG(status);
     //clean up process entry
-    process_destroy(pman,index);
+    if(!job_destroy(jman,job))
+      return FALSE;
   }
+
+  //process just exited
+  else if(WIFEXITED(status) && ground){
+    printf("[%d] Done                     %s",job,pman->processnames[index]);
+    //clean up process entry
+    if(!job_destroy(jman,job))
+      return FALSE;
+  }
+  else if(WIFEXITED(status)){
+    jman->recent_foreground_status = WEXITSTATUS(status);
+    if(!job_destroy(jman,job))
+      return FALSE;
+  }
+
 
   printf("\n");
 
@@ -172,92 +197,42 @@ _BOOL job_status(JMANAGER *pman,int job, int status,_BOOL done_print){
 
 }
 
-
+/**
+* cleans up job
+* jman: job manager
+* job: job to clean up
+**/
 _BOOL job_destroy(JMANAGER *jman, int job){
   memset(jman->jobsnames[job-1],0,MAX_JOB_NAME);
   jman->jobpgrids[job-1] = -1;
+  jman->suspendedstatus[job-1] = FALSE;
   jman->err[job-1] = 0;
 
 }
 
 
 /**
-* initializes process in process table
+* moves job ground
 * pman: ptr to process manager
-* name: name of process image
-* pid: process id
-* ground: process is fore or background
-* returns: status of success
+* job: process id of job to move to foreground
+* returns: status
 **/
-int job_init(JMANAGER *jman,EMBRYO *embryo,pid_t pid){
-  int job = (int)((long)jman->current_job - (long)jman->lowest_pid);
-  //loop back around if job not found
-  if(job >= MAX_JOBS){
-    job = 0;
-    while(jobsnames[job++][0]!='\0'){
-        if(job == MAX_JOBS) //all job entries are in use
-          return -1; //should never happen
-    }
-    jman->current_job = job - 1;
+_BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
+  if(jman->suspendedstatus[job-1]!= TRUE){
+    errno = EINVAL;
+    return FALSE
   }
 
-  //construct the job name string
-  if(jman->jobnames[job][0] == '\0'){
-    char * str =embryo->start_job_name;
-    int num_comp = embryo->num_components_job_name;
-    int num  = 0;
-    while(num<num_comp){
-      if(strlen(str)+3>=MAX_JOB_NAME){errno = ENOMEM; return FALSE;}
-      int i;
-      strcat(jman->jobsnames[job],((i=inInternal(str)) ? internals[i] : str);
-      if(num+1>=num_comp)
-        break;
-      strcat(jman->jobsnames[job]," ");
-      str = str + strlen(str);
-      num++;
-    }
+  if(kill(pman->jobpgrids[job-1],SIGCONT) == -1)
+    return FALSE;
+  jman->suspendedstatus[job-1] = TRUE;
 
+  if(!ground){
+    if(!job_wait_foreground(jman,job))
+      return FALSE;
   }
-  else{
-    jman->p
-  }
-
-  //set process image name
-  if(strlen(embryo->program)+1> MAX_PROCESSES)
-    return -1;
-  strcpy(pman->processnames[i],embryo->program);
-  pman->processpids[i] = pid;
-  pman->suspendedstatus[i] = FALSE;
-  if(!*embryo->background && pman->foreground_group == -1)
-    return -1;
-  //might be the first process in background group
-  if(*embryo->background && pman->background_group == -1){
-    pman->background_group = pid;
-  }
-  //set process job group
-  if(setpgid(pid,(*embryo->background) ? pman->background_group : pman->foreground_group) == -1)
-    return -1;
-
-
-
-  return i;
 }
 
-
-
-
-/**
-* clean up process entry on death
-* pman: ptr to process manager
-* proc_index: index in process table
-**/
-_BOOL process_destroy(PMANAGER *pman,int proc_index){
-
-  memset(pman->processnames[proc_index],0,MAX_PROCESS_NAME);
-  pman->processpids[proc_index] = -1;
-  pman->err[proc_index] = 0;
-  return TRUE;
-}
 
 
 /**
@@ -498,91 +473,12 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
 }
 
 
-/**
-* associate process pid with a job
-**/.
-_BOOL process_init(JMANAGER *jman,pid_t pid){
-    if(jman->procs.lowest_pid == 0)
-      jman->procs.lowest_pid = pid;
-      //pid's always go up, so take the lowest pid and subtract
-    long index = (long) pid - (long)jman->procs.lowest_pid;
-    jman->procs.processes[index] = jman->current_job;
-    return TRUE:
-}
 
 
 
 
 
-/**
-* moves job to the foreground
-* pman: ptr to process manager
-* job: process id of job to move to foreground
-* returns: status
-**/
-_BOOL process_foreground(PMANAGER *pman,pid_t job){
-  //get index of this job in pman
-  int index = process_search(pman,job);
-  if(index == -1) return FALSE; //something very bad
 
-  //get proc job cntrl group
-  int pgrp = getpgid(job);
-
-  //if suspended and in the foreground_group
-  if(pman->suspendedstatus[index] && pgrp == pman->foreground_group){
-    //continue
-    if(kill(job,SIGCONT)==-1)
-      return FALSE;
-  }
-  //if in the background group
-  else if(pgrp == pman->background_group){
-    //change groups
-    if(setpgid(job,pman->foreground_group)==-1)
-      return FALSE;
-
-    if(kill(job,SIGCONT)==-1)
-      return FALSE;
-  }
-  else
-    return FALSE; //invalid operation
-
-  pman->suspendedstatus[index]=FALSE;
-  //wait for this process to finish
-  if(!process_wait_foreground(pman))
-    return FALSE;
-
-  return TRUE;
-}
-
-
-/**
-*  moves job to background
-* pman: ptr to process manager
-* job: process id of job
-**/
-_BOOL process_background(PMANAGER *pman, pid_t job){
-  //get the index of this job in pman
-  int index = process_search(pman,job);
-  if(index == -1) return FALSE; //something very bad
-
-  //get job cntrl group
-  int pgrp = getpgid(job);
-
-  //if suspended and is in the foreground
-  if(pman->suspendedstatus[index] && pgrp == pman->foreground_group){
-    //move to the background
-    if(setpgid(job,pman->background_group) == -1)
-      return FALSE;
-    //tell it to continue
-    if(kill(job,SIGCONT)==-1)
-      return FALSE;
-    pman->suspendedstatus[index]=FALSE;
-  }
-  else
-    return FALSE; //invalid operation
-
-  return TRUE;
-}
 
 /**
 * prints out a list of status of process in pman
