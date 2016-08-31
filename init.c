@@ -44,8 +44,6 @@ static _BOOL signals_init(void (*term_handler)(int)){
     return FALSE;
   if(sigaddset(&blockset,SYNC_SIG)==-1)
     return FALSE;
-  if(sigaddset(&blockset,FAIL_SIG)==-1)
-    return FALSE;
   if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
     return FALSE;
 

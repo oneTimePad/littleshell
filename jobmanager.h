@@ -10,17 +10,11 @@
 #include "tokenizer.h"
 #include <signal.h>
 
-#ifndef SYNC_SIG
-  #define SYNC_SIG SIGRTMIN+6
-#endif
-#ifndef FAIL_SIG
-  #define FAIL_SIG SIGRTMIN+7
-#endif
-
+#define SIG_SYNC SIGRTMIN+8
 
 
 extern const char * const sys_siglist[];
-;
+
 
 // contains informaiton about all jobs
 typedef struct _JMANAGER{
@@ -28,7 +22,6 @@ typedef struct _JMANAGER{
   pid_t jobpgrids[MAX_JOBS];
   pid_t lastprocpid[MAX_JOBS]
   _BOOL suspendedstatus[MAX_JOBS];
-  int err[MAX_JOBS][MAX_JOBS];
   int recent_foreground_job_status;
   int current_job;
 }JMANAGER;
