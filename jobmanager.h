@@ -5,10 +5,13 @@
 #define MAX_PROCESS_NAME 100
 #define MAX_ARGUMENT 10
 #define MAX_ARG_LEN  ARG_MAX
+#define MAX_JOB_NAME 100
+#define MAX_JOBS 500
+#include <signal.h>
 #include "bool.h"
 #include "path.h"
 #include "tokenizer.h"
-#include <signal.h>
+
 
 #define SIG_SYNC SIGRTMIN+8
 
@@ -33,6 +36,6 @@ _BOOL job_reap(JMANAGER *);
 _BOOL job_status(JMANAGER *,int, int,_BOOL);
 _BOOL job_destroy(JMANAGER *, int);
 _BOOL job_ground_change(JMANAGER * ,int,_BOOL);
-
-
+_BOOL jobs_init(JMANAGER *,EMBRYO *,EMBRYO_INFO *,size_t);
+_BOOL jobs_dump(JMANAGER *);
 #endif

@@ -1,7 +1,7 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 #include "bool.h"
-#include "processmanager.h"
+#include "jobmanager.h"
 #include "tokenizer.h"
 
 #define JOBS   1
@@ -14,7 +14,7 @@
 
 
 short inInternal(char *);
-void shell_exit(_BOOL,PMANAGER *,TOKENS *);
-_BOOL execute_internal(int ,short,PMANAGER *,char **);
+void shell_exit(_BOOL,JMANAGER *,TOKENS *);
+_BOOL execute_internal(int ,short,JMANAGER *,char **);
 
 #endif

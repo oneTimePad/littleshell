@@ -65,9 +65,9 @@ static inline _BOOL path_init(char *path){
 * initialize process manager
 * returns: status
 **/
-static _BOOL pman_init(PMANAGER *pman){
+static _BOOL jman_init(JMANAGER *jman){
   if(pman == NULL) {errno = EINVAL; return FALSE;}
-  if(!process_manager_init(pman))
+  if(!job_manager_init(jman))
     return FALSE;
   return TRUE;
 }
@@ -121,7 +121,7 @@ _BOOL shell_init(INIT *init){
     return FALSE;
   if(!path_init(init->path))
     return FALSE;
-  if(!pman_init(init->pman))
+  if(!jman_init(init->jman))
     return FALSE;
   if(!line_init(init->line,init->line_size))
     return FALSE;

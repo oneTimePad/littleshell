@@ -1,29 +1,31 @@
 all: shell id ls setfacl getfacl setfattr getfattr
 
-shell: executable.o processmanager.o tokenizer.o errors.o internal.o init.o path.o
-	gcc -pthread -g -o shell shell.c executable.o processmanager.o tokenizer.o errors.o internal.o path.o init.o
 
 
-executable.o: bool.h tokenizer.h processmanager.h  executable.h 
-	gcc -g -c executable.c
+jobmanager.o : bool.h path.h tokenizer.h internal.h errors.h sensative.h embryos.h jobmanager.h
+	gcc -g -c jobmanager.c
 
-processmanager.o: bool.h path.h tokenizer.h processmanager.h internal.h errors.h
-	gcc -g -c processmanager.c
+embryos.o: internal.h errors.h sensative.h embryos.h
+	gcc -g -c embryos.c
+
+errors.o: bool.h errors.h
+	gcc -g -c errors.c
+
+internal.o: bool.h jobmanager.h tokenizer.h internal.h
+	gcc -g -c internal.c
+
+path.o: bool.h path.h
+	gcc -g -c path.c
+
+sensative.o: bool.h embryos.h sensative.h
+	gcc -g -c sensative.c
 
 tokenizer.o: bool.h tokenizer.h
 	gcc -g -c tokenizer.c
 
-errors.o: bool.h errors.h processmanager.h internal.h
-	gcc -g -c errors.c
-
-internal.o: bool.h processmanager.h tokenizer.h
-	gcc -g -c internal.c
-
-path.o: path.h bool.h
-	gcc -g -c path.c
-
-init.o: processmanager.h init.h
+init.o: jobmanager.h init.h
 	gcc -g -c init.c
+
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl

@@ -1,7 +1,7 @@
 #ifndef INIT_H
 #define INIT_H
 #include <sys/types.h>
-#include "processmanager.h"
+#include "jobmanager.h"
 
 #define LEN_AT 1
 #define LEN_COLON 1
@@ -10,7 +10,7 @@
 typedef struct _INIT{
   void (*term_handler)(int);
   char *path;
-  PMANAGER *pman;
+  JMANAGER *pman;
   char *line;
   size_t line_size;
 

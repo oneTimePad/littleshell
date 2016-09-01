@@ -41,25 +41,22 @@ short inInternal(char *cmd){
 
 /**
 * exits shell and clean up
-* pman: process manager
+* jman: job manager
 * tkns: token manager
 * no return
 **/
-void shell_exit(_BOOL TERM_SHELL,PMANAGER* pman,TOKENS* tkns){
+void shell_exit(_BOOL TERM_SHELL,JMANAGER* jman,TOKENS* tkns){
   if(TERM_SHELL){
     //terminate all processes
     int i =0;
-    for(;i<MAX_PROCESSES;i++)
-      if(pman->processpids[i]!=-1)
-        kill(pman->processpids[i],SIGTERM);
-
+    for(;i<MAX_JOBS;i++)
+      if(jman->jobpgrids[i]!=-1){
+        kill(jman->jobpgrids[i],SIGHUP);
+        kill(jman->jobpgrids[i],SIGCONT);
+      }
     if(tkns!=NULL)
       destroyTokens(tkns);
 
-    //wait for all child processes to die
-    while(wait()!=-1);
-    if(errno!=ECHILD && errno != 0)
-      errnoExit("wait()");
     exit(EXIT_SUCCESS);
   }
   else{
@@ -69,10 +66,10 @@ void shell_exit(_BOOL TERM_SHELL,PMANAGER* pman,TOKENS* tkns){
 
 /**
 * foreground a process
-* pman: process manager
+* jman: job manager
 * args: string of args
 **/
-static void shell_foreground(PMANAGER* pman,char **args){
+static void shell_foreground(JMANAGER* jman,char **args){
   char *pid;
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
@@ -89,8 +86,12 @@ static void shell_foreground(PMANAGER* pman,char **args){
 
   if(error)
     _exit(EXIT_FAILURE);
-  pid_t job = (pid_t)atoll(pid);
-  if(!process_foreground(pman,job)){
+  int job = atoi(pid);
+  if(job<=0 || job> MAX_JOBS){
+    fprintf(stderr,"no such job\n");
+    _exit(EXIT_FAILURE);
+  }
+  if(!job_ground_change(jman,job,FALSE)){
     fprintf(stderr,"failed to forground process %ld\n",(long)job);
     _exit(EXIT_FAILURE);
   }
@@ -119,9 +120,13 @@ static void shell_background(PMANAGER* pman, char **args){
 
   if(error)
     _exit(EXIT_FAILURE);
-  pid_t job = (pid_t)atoll(pid);
-  if(!process_background(pman,job)){
-    fprintf(stderr,"failed to background process %ld\n",(long)job);
+  int job = atoi(pid);
+  if(job<=0 || job> MAX_JOBS){
+    fprintf(stderr,"no such job\n");
+    _exit(EXIT_FAILURE);
+  }
+  if(!job_ground_change(jman,job,TRUE)){
+    fprintf(stderr,"failed to forground process %ld\n",(long)job);
     _exit(EXIT_FAILURE);
   }
   return _exit(EXIT_SUCCESS);
@@ -132,7 +137,7 @@ static void shell_background(PMANAGER* pman, char **args){
 * pman: process manager
 * args: string of args
 **/
-static void shell_echo(PMANAGER* pman,char **args){
+static void shell_echo(JMANAGER* jman,char **args){
   _BOOL error = FALSE;
   args++;
   while(args!=NULL){
@@ -142,7 +147,7 @@ static void shell_echo(PMANAGER* pman,char **args){
   }
   if(error)
     _exit(EXIT_FAILURE);
-  printf("%d\n",pman->recent_foreground_status);
+  printf("%d\n",jman->recent_foreground_status);
   _exit(EXIT_SUCCESS);
 }
 
@@ -176,7 +181,7 @@ static void shell_help(const char* format,char **args){
 * pman: process manager
 * args: string of arguments
 **/
-static void shell_dump(PMANAGER *pman,char **args){
+static void shell_dump(JMANAGER *jman,char **args){
   _BOOL error = FALSE;
   args++;
   while(args!=NULL){
@@ -187,7 +192,7 @@ static void shell_dump(PMANAGER *pman,char **args){
 
   if(error)
     _exit(EXIT_FAILURE);
-  if(!process_dump(pman))
+  if(!jobs_dump(jman))
     _exit(EXIT_FAILURE);
   _exit(EXIT_SUCCESS);
 }
@@ -198,11 +203,11 @@ static void shell_dump(PMANAGER *pman,char **args){
 * execute internal command in child process
 * pipe_end: write end of pipe to notify parent of errnos
 * key: indicates the internal command
-* pman: process manager
+* jman: job manager
 * args: array of args string to command
 * returns: status
 **/
-_BOOL execute_internal(int pipe_end,short key,PMANAGER* pman,char **args){
+_BOOL execute_internal(int pipe_end,short key,JMANAGER* jman,char **args){
   if(pman == NULL || args == NULL){errno = EINVAL; return FALSE;}
   switch(key){
     case JOBS:
@@ -215,13 +220,13 @@ _BOOL execute_internal(int pipe_end,short key,PMANAGER* pman,char **args){
         if(close(pipe_end) == -1){
           _exit(EXIT_FAILURE);
         }
-        shell_foreground(pman,args);
+        shell_foreground(jman,args);
         break;
     case BG:
         if(close(pipe_end) == -1){
           _exit(EXIT_FAILURE);
         }
-        shell_background(pman,args);
+        shell_background(jman,args);
         break;
     case SHEXIT:
       if(close(pipe_end) == -1){
@@ -232,7 +237,7 @@ _BOOL execute_internal(int pipe_end,short key,PMANAGER* pman,char **args){
         if(close(pipe_end) == -1){
           _exit(EXIT_FAILURE);
         }
-        shell_echo(pman,args);
+        shell_echo(jman,args);
         break;
     case HELP:
         if(close(pipe_end) == -1){

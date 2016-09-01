@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <signal.h>
 #include "bool.h"
-#include "processmanager.h"
+
 
 
 inline void errnoExit(const char* fct_name);

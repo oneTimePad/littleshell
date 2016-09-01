@@ -209,6 +209,7 @@ _BOOL job_destroy(JMANAGER *jman, int job){
 * returns: status
 **/
 _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
+  if(jman->jobpgrids[job-1] == -1){errno = EINVAL; return FALSE;}
   if(jman->suspendedstatus[job-1]!= TRUE){
     errno = EINVAL;
     return FALSE
@@ -441,26 +442,17 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
   return TRUE;
 }
 
-
-
-
-
-
-
-
-
 /**
 * prints out a list of status of process in pman
 * pman: ptr to process manager
 **/
-_BOOL process_dump(PMANAGER *pman){
+_BOOL jobs_dump(JMANAGER *jman){
 
   int i = 0;
-  for(;i<MAX_PROCESSES;i++){
-    if(pman->processpids[i]!=-1 && pman->suspendedstatus[i])
-      printf("JOB: %d NAME: %s SUSPENDED\n",pman->processpids[i],pman->processnames[i]);
-    else if(pman->processpids[i]!=-1 && !pman->suspendedstatus[i])
-      printf("JOB: %d NAME: %s RUNNING\n",pman->processpids[i],pman->processnames[i]);
+  for(;i<MAX_JOBS;i++){
+    if(jman->jobpgrids[i] !=-1){
+      printf("[%d] %s                    %s\n",i+1,(jman->suspendedstatus[i]) ? "Stopped" : "Running",jman->jobnames[i]);
+    }
   }
   return TRUE;
 

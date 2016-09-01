@@ -1,8 +1,6 @@
 #ifndef EMBRYO_H
 #define EMBRYO_H
 #include <limits.h>
-#define MAX_PROCESSES 500
-#define MAX_PROCESS_NAME 100
 #define MAX_ARGUMENT 10
 #define MAX_ARG_LEN  ARG_MAX
 #define MAX_JOB_NAME 100

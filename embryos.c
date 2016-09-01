@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include "internal.h"
 #include "errors.h"
+#include "sensitive.h"
 #include "embryos.h"
 
 
