@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
-#include "processmanager.h"
+#include "jobmanager.h"
 #include "internal.h"
 #include "errors.h"
 
@@ -29,7 +29,7 @@ _BOOL job_manager_init(JMANAGER *jman){
     for(;i<MAX_JOBS;i++){
       jman->jobpgrids[i]=-1;
     }
-    jman->recent_foreground_status = 0;
+    jman->recent_foreground_job_status = 0;
 
     return TRUE;
 }
@@ -42,7 +42,7 @@ _BOOL job_manager_init(JMANAGER *jman){
 **/
 int find_empty_job(JMANAGER *jman){
   int job = jman->current_job;
-  while(jman->jobpgrids!=-1){
+  while(jman->jobpgrids[job-1]!=-1){
     if(job == jman->current_job){
       errno = ENOMEM;
       return -1;
@@ -128,7 +128,7 @@ _BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
     jman->suspendedstatus[job-1]=TRUE;
     printf("[%d]  Stopped                   %s",job,jman->jobnames[job-1]);
     if(!ground)
-      jman->recent_foreground_status = WSTOPSIG(status);
+      jman->recent_foreground_job_status = WSTOPSIG(status);
   }
   //if process was killed by a signal and backgrounded
   else if(WIFSIGNALED(status) && ground){
@@ -162,7 +162,7 @@ _BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
     #endif
     printf("%s %s",str_sig,str_core);
     //convert signal to strmsg
-    jman->recent_foreground_status = WTERMSIG(status);
+    jman->recent_foreground_job_status = WTERMSIG(status);
     //clean up process entry
     if(!job_destroy(jman,job))
       return FALSE;
@@ -170,13 +170,13 @@ _BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
 
   //process just exited
   else if(WIFEXITED(status) && ground){
-    printf("[%d] Done                     %s",job,pman->processnames[index]);
+    printf("[%d] Done                     %s",job,jman->jobnames[job-1]);
     //clean up process entry
     if(!job_destroy(jman,job))
       return FALSE;
   }
   else if(WIFEXITED(status)){
-    jman->recent_foreground_status = WEXITSTATUS(status);
+    jman->recent_foreground_job_status = WEXITSTATUS(status);
     if(!job_destroy(jman,job))
       return FALSE;
   }
@@ -194,7 +194,7 @@ _BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
 * job: job to clean up
 **/
 _BOOL job_destroy(JMANAGER *jman, int job){
-  memset(jman->jobsnames[job-1],0,MAX_JOB_NAME);
+  memset(jman->jobnames[job-1],0,MAX_JOB_NAME);
   jman->jobpgrids[job-1] = -1;
   jman->suspendedstatus[job-1] = FALSE;
 
@@ -212,10 +212,10 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
   if(jman->jobpgrids[job-1] == -1){errno = EINVAL; return FALSE;}
   if(jman->suspendedstatus[job-1]!= TRUE){
     errno = EINVAL;
-    return FALSE
+    return FALSE;
   }
 
-  if(kill(pman->jobpgrids[job-1],SIGCONT) == -1)
+  if(kill(jman->jobpgrids[job-1],SIGCONT) == -1)
     return FALSE;
   jman->suspendedstatus[job-1] = TRUE;
 
@@ -317,12 +317,12 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
           if(!set){ //since chld receives copy of parent,
                     //after parent sets this once each child will see the change
                     //there is no race condition here with set
-            siginfo_t info
-            sigwaitinfo(&blockset,&info); //deals with race-condition
+            siginfo_t sig_info;
+            sigwaitinfo(&blockset,&sig_info); //deals with race-condition
                                           //must wait for foreground proc grp to be set
           }
           else{
-            setpgid(0,jman->jobpgrids[for_seq-1]);
+            setpgid(0,jman->jobpgrids[fork_seq-1]);
           }
 
 
@@ -349,7 +349,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
           else{
             //run internal command
             errno = 0;
-            if(!execute_internal(pipes[1],embryos[index].internal_key,pman,args)){
+            if(!execute_internal(pipes[1],embryos[index].internal_key,jman,args)){
               perror("internal_command");
             }
 
@@ -386,7 +386,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
             setpgid(pid,pid);
             tcsetpgid(STDIN_FILENO,pid); //set forground proc group
             set = TRUE;
-            if(kill(pid,SIG_SYNC) == -1) //sync with child foreground proc group set
+            if(kill(pid,SYNC_SIG) == -1) //sync with child foreground proc group set
               return FALSE;
           }
           else{

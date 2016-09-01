@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 #include "internal.h"
 #include "errors.h"
 #include "sensitive.h"
@@ -66,17 +67,18 @@ _BOOL add_to_job_name(EMBRYO_INFO *info,char which){
 */
 _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
   if(info->cur_proc == -1)return TRUE;
+  /*
   if(info->pipe_present && procs[info->cur_proc-1].p_pipe_read!=-1){
     if(close(procs[info->cur_proc].p_pipe_read)==-1)
       return FALSE;
     procs[info->cur_proc].p_stdout=-1;
-  }
+  }*/
   int num_procs = info->cur_proc;
   int index = 0;
 
   for(;index < num_procs;index++){
 
-    if(procs[index].p_stdout!=-1 && procs[index].my_pipe_other==-1){
+    if(procs[index].p_stdout!=-1 && procs[index].p_pipe_read==-1){
       if(close(procs[index].p_stdout) == -1)
         return FALSE;
     }
@@ -95,8 +97,8 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 * info: information about current execution context of embryos_init
 * name: name of this embryo
 **/
-_BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
-  if(info->cur_proc+1 >= size){
+_BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, size_t size,char *name){
+  if(info->cur_proc+1 >= size ){
     errno = ENOMEM;
     return FALSE;
   }
@@ -107,7 +109,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   //starts forming the job name
   //first entry in the job
   //forkseqname is the pre-cursor to jobname
-  if(info_cur_proc-1 <0 || procs[info->cur_proc-1].fork_seq != new_proc->fork_seq){
+  if(info->cur_proc-1 <0 || procs[info->cur_proc-1].fork_seq != new_proc->fork_seq){
     if(strlen(name)+1 > MAX_JOB_NAME){
       errno = ENOMEM;
       return FALSE;
@@ -120,13 +122,12 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
       errno = ENOMEM;
       return FALSE;
     }
-    strcat(info->forkseqname[info->forkseqname-1]," ");
-    strcat(info->forkseqname[info->forkseqname-1],name);
+    strcat(info->forkseqname[info->fork_seq-1]," ");
+    strcat(info->forkseqname[info->fork_seq-1],name);
 
   }
 
-  //form the acutall path name for this embryo( i.e. what goes into execve)
-  new_proc->internal_command = FALSE;
+
   //attempt to get the process name and check if it is in the path if necessary
   if(strlen(name)+1>PATH_LIM){
     info->cur_proc-=1;
@@ -135,9 +136,9 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   }
   short key = NONE;
   new_proc->internal_key = NONE;
-  if(((strstr(name,"/")!= NULL) ? strcpy(new_proc->program,name) :( (inPath(cur_tkn,new_proc->program,PATH_LIM)&& (key=inInternal(name))==NONE) ? new_proc->program : NULL) ) ==NULL){
+  if(((strstr(name,"/")!= NULL) ? strcpy(new_proc->program,name) :( (inPath(name,new_proc->program,PATH_LIM)&& (key=inInternal(name))==NONE) ? new_proc->program : NULL) ) ==NULL){
     //it might be a command internal to the shell
-    if((key!=NONE){
+    if(key!=NONE){
       new_proc->internal_key = key;
     }
     else{
@@ -149,7 +150,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   //set up args
   new_proc->num_args = 0;
   //set up file-descriptors
-  new_proc->my_pipe_other = -1;
+  new_proc->p_pipe_read = -1;
   new_proc->p_stdin = -1;
   new_proc->p_stdout = -1;
 
@@ -163,13 +164,14 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
 **/
 _BOOL embryo_arg(EMBRYO *procs,EMBRYO_INFO *info, char *arg){
   //check for overflow
-  if(embryos[info->cur_proc].num_args >= MAX_ARGUMENT || strlen(arg) + 1 > MAX_ARG_LEN){
+  if(procs[info->cur_proc].num_args >= MAX_ARGUMENT || strlen(arg) + 1 > MAX_ARG_LEN){
     info->cur_proc-=1;
     errno = ENOMEM;
     return FALSE;
   }
 
-  EMBRYO *proc =  procs[info->cur_proc];
+  EMBRYO *proc =  &procs[info->cur_proc];
+
   strcpy(proc->arguments[proc->num_args++],arg);
   return TRUE;
 
@@ -195,7 +197,8 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           //if there is at least 1 embryo already
           if(info->cur_proc !=-1){
             //call the post handler
-            if(!posthandler[(info->last_sequence*-1)](embryos,info,cur_tkn)){
+
+            if(posthandlers[(info->last_sequence*-1)](procs,info,cur_tkn)  == FALSE ){
               info->err_character = cur_tkn;
               return FALSE;
             }
@@ -204,7 +207,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           //else we need to create at least one proc
           //since there is no last_sequence yet
           else{
-            if(!embryo_create(embryos,info,cur_tkn))
+            if(!embryo_create(procs,info,size,cur_tkn))
               return FALSE;
           }
           break;
@@ -212,7 +215,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
         //is a sensitive char
         default:{
           //call the prehandler based on the *cur_tkn, which sensitive char it is
-          if(!prehandlers[(*cur_tkn * -1)](embryos,info,*cur_tkn)){
+          if(  prehandlers[(*cur_tkn * -1)](procs,info,*cur_tkn)  == FALSE ){
             if(errno == EINVAL)//syntax error
               info->err_character = cur_tkn;
             return FALSE;

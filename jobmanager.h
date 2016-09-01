@@ -4,16 +4,17 @@
 #define MAX_PROCESSES 500
 #define MAX_PROCESS_NAME 100
 #define MAX_ARGUMENT 10
-#define MAX_ARG_LEN  ARG_MAX
+#define MAX_ARG_LEN  1000
 #define MAX_JOB_NAME 100
 #define MAX_JOBS 500
 #include <signal.h>
 #include "bool.h"
 #include "path.h"
 #include "tokenizer.h"
+#include "embryos.h"
 
 
-#define SIG_SYNC SIGRTMIN+8
+#define SYNC_SIG SIGRTMIN+8
 
 
 extern const char * const sys_siglist[];
@@ -23,7 +24,7 @@ extern const char * const sys_siglist[];
 typedef struct _JMANAGER{
   char jobnames[MAX_JOB_NAME][MAX_JOBS];
   pid_t jobpgrids[MAX_JOBS];
-  pid_t lastprocpid[MAX_JOBS]
+  pid_t lastprocpid[MAX_JOBS];
   _BOOL suspendedstatus[MAX_JOBS];
   int recent_foreground_job_status;
   int current_job;
