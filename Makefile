@@ -1,4 +1,4 @@
-all: id ls setfacl getfacl setfattr getfattr
+all: shell id ls setfacl getfacl setfattr getfattr 
 
 
 
@@ -32,6 +32,9 @@ execute.o: bool.h tokenizer.h embryos.h jobmanager.h
 shell.o: bool.h path.h errors.h init.h internal.h tokenizer.h jobmanager.h embryos.h execute.h shell.h
 	gcc -g -c shell.c
 
+
+shell: shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o
+	gcc -o shell shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl
