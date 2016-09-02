@@ -26,6 +26,9 @@ tokenizer.o: bool.h tokenizer.h
 init.o: jobmanager.h init.h
 	gcc -g -c init.c
 
+execute.o: bool.h tokenizer.h embryos.h jobmanager.h
+	gcc -g -c execute.c
+
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl

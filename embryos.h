@@ -1,6 +1,6 @@
 #ifndef EMBRYO_H
 #define EMBRYO_H
-
+#include "path.h"
 #define MAX_ARGUMENT 10
 #define MAX_ARG_LEN 1000
 #define MAX_JOB_NAME 100

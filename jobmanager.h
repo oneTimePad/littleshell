@@ -37,6 +37,6 @@ _BOOL job_reap(JMANAGER *);
 _BOOL job_status(JMANAGER *,int, int,_BOOL);
 _BOOL job_destroy(JMANAGER *, int);
 _BOOL job_ground_change(JMANAGER * ,int,_BOOL);
-_BOOL jobs_init(JMANAGER *,EMBRYO *,EMBRYO_INFO *,size_t);
+_BOOL jobs_init(JMANAGER *,EMBRYO *,EMBRYO_INFO *);
 _BOOL jobs_dump(JMANAGER *);
 #endif

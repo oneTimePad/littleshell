@@ -235,9 +235,10 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
 * err_ptr: used to return child errno to caller
 * returns: status if false and, if errno is 0, check err_ptr(child error), else the parent had an error
 **/
-_BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embryos){
+_BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
   _BOOL err_ind = FALSE;
   errno = 0;
+  int num_embryos = info->cur_proc+1;
   if(num_embryos <=0){
     errno = EINVAL;
     return FALSE;
