@@ -29,6 +29,9 @@ init.o: jobmanager.h init.h
 execute.o: bool.h tokenizer.h embryos.h jobmanager.h
 	gcc -g -c execute.c
 
+shell.o: bool.h path.h errors.h init.h internal.h tokenizer.h jobmanager.h embryos.h execute.h shell.h
+	gcc -g -c shell.c
+
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl

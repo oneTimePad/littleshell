@@ -3,20 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <signal.h>
-#include <pthread.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <pwd.h>
-#include "bool.h"
-#include "tokenizer.h"
-#include "executable.h"
-#include "processmanager.h"
-#include "errors.h"
-#include "internal.h"
-#include "path.h"
-#include "init.h"
+#include "shell.h"
 
 
 
@@ -26,16 +13,16 @@ void term_handler(int sig){
     term_signal = 1;
 }
 
-#define MAX_LINE_LEN 100000
+
 
 int main(){
-  PMANAGER pman;
+  JMANAGER jman;
   char line[MAX_LINE_LEN];
 
   INIT init_opt;
   init_opt.term_handler = &term_handler;
   init_opt.path = LPATH;
-  init_opt.pman = &pman;
+  init_opt.jman = &jman;
   init_opt.line = line;
   init_opt.line_size = MAX_LINE_LEN;
   //initialize the shell
@@ -47,7 +34,7 @@ int main(){
 //main loop
   while(1){
     if(term_signal){
-      shell_exit(TRUE,&pman,NULL);
+      shell_exit(TRUE,&jman,NULL);
     }
 
     //read use input to shell
@@ -59,7 +46,7 @@ int main(){
     ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
     TOKENS curr_tkn;
 
-    process_reap(&pman);
+    job_reap(&jman);
 
     if(bytes_read==-1){
       continue;
@@ -72,7 +59,7 @@ int main(){
     }
     free(input_buf);
     if(strcmp(getToken(&curr_tkn,CURR_TOKEN),"exit") == 0)
-      shell_exit(TRUE,&pman,&curr_tkn);
+      shell_exit(TRUE,&jman,&curr_tkn);
 
     EMBRYO embryos[MAX_EMBRYOS];
     memset(&embryos,0,MAX_EMBRYOS*sizeof(EMBRYO));
@@ -80,11 +67,8 @@ int main(){
     memset(&info,0,sizeof(EMBRYO_INFO));
     info.cur_proc = -1;
     info.fork_seq =  1;
-    info.last_sequence = '\0';
-    info.pipe_present = FALSE;
-    info.continuing = FALSE;
     _BOOL ret;
-    while((ret=execute(&pman,&curr_tkn,embryos,&info)) == FALSE && errno ==0 && info.continuing){
+    while((ret=execute(&jman,&curr_tkn,embryos,&info)) == FALSE && errno ==0 && info.last_sequence!='\0'){
       destroyTokens(&curr_tkn);
       do{
         errno = 0;
@@ -108,13 +92,13 @@ int main(){
       if(errno !=0){errnoExit("execute()");}
       else{fprintf(stderr,"shell experienced an error\n");}
       fflush(stderr);
-      shell_exit(TRUE,&pman,&curr_tkn);
+      shell_exit(TRUE,&jman,&curr_tkn);
     }
 
 
     //clean up
     destroyTokens(&curr_tkn);
-    process_reap(&pman);
+    job_reap(&jman);
   }
 
   exit(EXIT_SUCCESS);
