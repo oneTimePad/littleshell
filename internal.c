@@ -103,7 +103,7 @@ static void shell_foreground(JMANAGER* jman,char **args){
 * pman: process manager
 * args: string of args
 **/
-static void shell_background(PMANAGER* pman, char **args){
+static void shell_background(JMANAGER* jman, char **args){
   char *pid;
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
@@ -147,7 +147,7 @@ static void shell_echo(JMANAGER* jman,char **args){
   }
   if(error)
     _exit(EXIT_FAILURE);
-  printf("%d\n",jman->recent_foreground_status);
+  printf("%d\n",jman->recent_foreground_job_status);
   _exit(EXIT_SUCCESS);
 }
 
@@ -208,13 +208,13 @@ static void shell_dump(JMANAGER *jman,char **args){
 * returns: status
 **/
 _BOOL execute_internal(int pipe_end,short key,JMANAGER* jman,char **args){
-  if(pman == NULL || args == NULL){errno = EINVAL; return FALSE;}
+  if(jman == NULL || args == NULL){errno = EINVAL; return FALSE;}
   switch(key){
     case JOBS:
         if(close(pipe_end) == -1){
           _exit(EXIT_FAILURE);
         }
-        shell_dump(pman,args);
+        shell_dump(jman,args);
         break;
     case FG:
         if(close(pipe_end) == -1){

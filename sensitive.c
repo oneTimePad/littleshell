@@ -1,29 +1,13 @@
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include "tokenizer.h"
+#include "path.h"
+#include "sensitive.h"
 
-#include "sensative.h"
 
-//contains pre and post handlers for embryos_init
 
-static prehandler prehandlers[] ={
-  NULL,
-  pre_pipe_handler,
-  pre_redirio_handler,
-  pre_redirio_handler,
-  pre_redirio_handler,
-  pre_ampersan_handler,
-  pre_ampersan_handler,
-  NULL
-};
-
-static posthandler posthandlers[] = {
-  embryo_arg,
-  post_pipe_handler,
-  post_redirio_handler,
-  post_redirio_handler,
-  pre_redirio_handler,
-  post_ampersan_handler,
-  pre_ampersan_handler,
-  NULL
-};
 
 // pre- handlers, executed when a specific set of characters are specified in shell input
 
@@ -98,7 +82,7 @@ _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
   if(which == ANDIN)
     info->background[info->fork_seq-1] = TRUE;
 
-  info->fork_seq = find_empty_job(info->jman);
+  info->fork_seq++;
   info->background[info->fork_seq-1] = FALSE;
   info->last_sequence = which;
   return TRUE;
@@ -166,3 +150,27 @@ _BOOL post_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
   info->last_sequence = '\0';
   return TRUE;
 }
+
+//contains pre and post handlers for embryos_init
+
+static prehandler prehandlers[] ={
+  NULL,
+  pre_pipe_handler,
+  pre_redirio_handler,
+  pre_redirio_handler,
+  pre_redirio_handler,
+  pre_ampersan_handler,
+  pre_ampersan_handler,
+  NULL
+};
+
+static posthandler posthandlers[] = {
+  embryo_arg,
+  post_pipe_handler,
+  post_redirio_handler,
+  post_redirio_handler,
+  post_redirio_handler,
+  post_ampersan_handler,
+  post_ampersan_handler,
+  NULL
+};

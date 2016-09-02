@@ -12,6 +12,8 @@
 #include "sensitive.h"
 #include "embryos.h"
 
+extern  prehandler prehandlers[];
+extern  posthandler posthandlers[];
 
 /**
 * determines if first char in str is a shell understood character
@@ -97,8 +99,8 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
 * info: information about current execution context of embryos_init
 * name: name of this embryo
 **/
-_BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, size_t size,char *name){
-  if(info->cur_proc+1 >= size ){
+_BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
+  if(info->cur_proc+1 >= MAX_JOBS ){
     errno = ENOMEM;
     return FALSE;
   }
@@ -185,7 +187,7 @@ _BOOL embryo_arg(EMBRYO *procs,EMBRYO_INFO *info, char *arg){
 * info: contains information about where to start( i.e to be used if we are continuing from a previous call to embryos_init)
 * returns: status, return FALSE and errno is set to EINVAL for bad syntax or 0 if we don't have enough info (i.e go back to shell)
 **/
-_BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
+_BOOL embryos_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
   if(info == NULL | tkns == NULL || procs == NULL) {errno = EFAULT; return FALSE;}
   char *cur_tkn;
   int which = CURR_TOKEN;
@@ -207,7 +209,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs,size_t size, EMBRYO_INFO* info){
           //else we need to create at least one proc
           //since there is no last_sequence yet
           else{
-            if(!embryo_create(procs,info,size,cur_tkn))
+            if(!embryo_create(procs,info,cur_tkn))
               return FALSE;
           }
           break;

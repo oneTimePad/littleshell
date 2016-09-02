@@ -9,8 +9,6 @@ typedef  _BOOL (*prehandler) (EMBRYO *,EMBRYO_INFO *,char);
 typedef  _BOOL (*posthandler)(EMBRYO *,EMBRYO_INFO *,char *);
 
 
-extern prehandler prehandlers[];
-extern posthandler posthandlers[];
 
 
 

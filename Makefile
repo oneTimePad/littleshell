@@ -2,7 +2,7 @@ all: id ls setfacl getfacl setfattr getfattr
 
 
 
-jobmanager.o : bool.h path.h tokenizer.h internal.h errors.h sensative.h embryos.h jobmanager.h
+jobmanager.o : bool.h path.h tokenizer.h internal.h errors.h sensitive.h embryos.h jobmanager.h
 	gcc -g -c jobmanager.c
 
 embryos.o: internal.h errors.h sensitive.h embryos.h
@@ -18,7 +18,7 @@ path.o: bool.h path.h
 	gcc -g -c path.c
 
 sensitive.o: bool.h embryos.h sensitive.h
-	gcc -g -c sensative.c
+	gcc -g -c sensitive.c
 
 tokenizer.o: bool.h tokenizer.h
 	gcc -g -c tokenizer.c

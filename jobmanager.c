@@ -255,6 +255,11 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
 
   pid_t pid;
   int index =0; //current embryo
+  int job = find_empty_job(jman);
+  if(job == -1){
+    errno = ENOMEM;
+    return FALSE;
+  }
   int fork_seq = embryos[index].fork_seq; //current set of forked processes
   _BOOL end = FALSE;
   while(!end){
@@ -295,15 +300,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
           }
 
           //create the args list
-          char *args[embryos[index].num_args];
-          args[0] = embryos[index].program;
-          int args_index =1;
-          char *arguments = embryos[index].arguments;
-          for(;args_index<embryos[index].num_args;args_index++){
-            args[args_index] = arguments;
-            arguments = arguments+strlen(arguments)+1;
-          }
-          args[args_index] = NULL;
+
 
           //sigaction for dfl actions
           struct sigaction dfl_action;
@@ -312,7 +309,16 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
             _exit(EXIT_FAILURE);
           dfl_action.sa_flags = 0;
 
+          /*
+          int i = 0;
+          char *args[MAX_ARGUMENT+1];
+          for(;i<embryos[index].num_args;i++){
+            args[i] = embryos[index].arguments[i];
+          }
+          args[i] = NULL;*/
 
+          char **args = ((char **)embryos[index].arguments);
+          args[embryos[index].num_args] = NULL;
 
           if(!set){ //since chld receives copy of parent,
                     //after parent sets this once each child will see the change
@@ -322,7 +328,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
                                           //must wait for foreground proc grp to be set
           }
           else{
-            setpgid(0,jman->jobpgrids[fork_seq-1]);
+            setpgid(0,jman->jobpgrids[job-1]);
           }
 
 
@@ -336,7 +342,6 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
             _exit(EXIT_FAILURE);
           if(sigaction(SIGTSTP,&dfl_action,NULL) == -1)
             _exit(EXIT_FAILURE);
-
 
           int err = 1;
           if(embryos[index].internal_key!=NONE){
@@ -381,8 +386,9 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
 
           //setup process entry
           if(!set){
-            strcpy(jman->jobnames[fork_seq-1],info->forkseqname[fork_seq-1]);
-            jman->jobpgrids[fork_seq-1] = pid;
+
+            strcpy(jman->jobnames[job-1],info->forkseqname[job-1]);
+            jman->jobpgrids[job-1] = pid;
             setpgid(pid,pid);
             tcsetpgid(STDIN_FILENO,pid); //set forground proc group
             set = TRUE;
@@ -390,7 +396,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
               return FALSE;
           }
           else{
-            setpgid(pid,jman->jobpgrids[fork_seq-1]);
+            setpgid(pid,jman->jobpgrids[job-1]);
           }
           //notified if last process in group forked failed
           int err;
@@ -432,8 +438,14 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info,size_t num_embr
           return FALSE; //if this is true we can't continue
         //update for_seq for next time
         fork_seq = embryos[index].fork_seq;
+        job = find_empty_job(jman);
+        if(job == -1){
+          errno = ENOMEM;
+          return FALSE;
+        }
     }
     else{
+      jman->current_job = job;
       end = TRUE;
     }
 
