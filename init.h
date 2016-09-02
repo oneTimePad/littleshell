@@ -10,7 +10,7 @@
 typedef struct _INIT{
   void (*term_handler)(int);
   char *path;
-  JMANAGER *pman;
+  JMANAGER *jman;
   char *line;
   size_t line_size;
 

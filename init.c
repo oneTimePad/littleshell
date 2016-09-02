@@ -66,7 +66,7 @@ static inline _BOOL path_init(char *path){
 * returns: status
 **/
 static _BOOL jman_init(JMANAGER *jman){
-  if(pman == NULL) {errno = EINVAL; return FALSE;}
+  if(jman == NULL) {errno = EINVAL; return FALSE;}
   if(!job_manager_init(jman))
     return FALSE;
   return TRUE;
