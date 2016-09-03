@@ -15,16 +15,16 @@ void term_handler(int sig){
 
 
 
-int main(){
+int main(int argc, char *argv[]){
   JMANAGER jman;
   char line[MAX_LINE_LEN];
 
   INIT init_opt;
-  init_opt.term_handler = &term_handler;
   init_opt.path = LPATH;
   init_opt.jman = &jman;
   init_opt.line = line;
   init_opt.line_size = MAX_LINE_LEN;
+  init_opt.term_handler = &term_handler;
   //initialize the shell
   if(!shell_init(&init_opt))
     errnoExit("shell_init()");

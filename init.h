@@ -14,7 +14,7 @@ typedef struct _INIT{
   char *line;
   size_t line_size;
 
-}INIT;
+} INIT;
 
 
 _BOOL shell_init(INIT *);
