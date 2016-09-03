@@ -9,7 +9,8 @@ typedef  _BOOL (*prehandler) (EMBRYO *,EMBRYO_INFO *,char);
 typedef  _BOOL (*posthandler)(EMBRYO *,EMBRYO_INFO *,char *);
 
 
-
+#define NUM_PRE_HANDLERS 8
+#define NUM_POST_HANDLER 8
 
 
 

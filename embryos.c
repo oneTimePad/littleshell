@@ -12,8 +12,8 @@
 #include "sensitive.h"
 #include "embryos.h"
 
-extern  prehandler prehandlers[];
-extern  posthandler posthandlers[];
+extern  prehandler prehandlers[NUM_PRE_HANDLERS];
+extern  posthandler posthandlers[NUM_POST_HANDLER];
 
 /**
 * determines if first char in str is a shell understood character

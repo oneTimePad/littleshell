@@ -33,8 +33,8 @@ shell.o: bool.h path.h errors.h init.h internal.h tokenizer.h jobmanager.h embry
 	gcc -g -c shell.c
 
 
-shell: shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o
-	gcc -o shell shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o
+shell: shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o sensitive.o
+	gcc -o shell shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o sensitive.o
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl

@@ -391,7 +391,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
             strcpy(jman->jobnames[job-1],info->forkseqname[job-1]);
             jman->jobpgrids[job-1] = pid;
             setpgid(pid,pid);
-            tcsetpgid(STDIN_FILENO,pid); //set forground proc group
+            tcsetpgrp(STDIN_FILENO,pid); //set forground proc group
             set = TRUE;
             if(kill(pid,SYNC_SIG) == -1) //sync with child foreground proc group set
               return FALSE;
@@ -427,7 +427,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
 
 
     if(!info->background[fork_seq-1]){
-      if(!process_wait_foreground(jman,fork_seq))
+      if(!job_wait_foreground(jman,fork_seq))
         return FALSE;
     }
 

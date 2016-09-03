@@ -153,7 +153,7 @@ _BOOL post_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
 
 //contains pre and post handlers for embryos_init
 
-static prehandler prehandlers[] ={
+prehandler prehandlers[NUM_PRE_HANDLERS] ={
   NULL,
   pre_pipe_handler,
   pre_redirio_handler,
@@ -164,7 +164,7 @@ static prehandler prehandlers[] ={
   NULL
 };
 
-static posthandler posthandlers[] = {
+posthandler posthandlers[NUM_POST_HANDLER] = {
   embryo_arg,
   post_pipe_handler,
   post_redirio_handler,
