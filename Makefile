@@ -34,7 +34,12 @@ shell.o: bool.h path.h errors.h init.h internal.h tokenizer.h jobmanager.h embry
 
 
 shell: shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o sensitive.o
-	gcc -o shell shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o sensitive.o
+	gcc -g -o shell shell.o execute.o init.o tokenizer.o path.o internal.o errors.o embryos.o jobmanager.o sensitive.o
+
+
+shell_e: shell.h execute.h init.h tokenizer.h path.h internal.h errors.h embryos.h jobmanager.h sensitive.h
+	gcc -g -o shel_e shell.c execute.c init.c tokenizer.c path.c internal.c errors.c embryos.c jobmanager.c sensitive.c
+
 
 ls: bool.h errors.h ./bsource/ls/ls.h
 	gcc  -o ./bin/ls ./bsource/ls/ls.c errors.c -lacl

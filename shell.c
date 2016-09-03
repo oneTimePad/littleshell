@@ -16,6 +16,7 @@ void term_handler(int sig){
 
 
 int main(int argc, char *argv[]){
+
   JMANAGER jman;
   char line[MAX_LINE_LEN];
 
@@ -51,7 +52,7 @@ int main(int argc, char *argv[]){
     if(bytes_read==-1){
       continue;
     }
-
+    /*
     //perform tokenization
     if(!initializeTokens(&curr_tkn,input_buf,bytes_read)){
       free(input_buf);
@@ -98,7 +99,7 @@ int main(int argc, char *argv[]){
 
     //clean up
     destroyTokens(&curr_tkn);
-    job_reap(&jman);
+    job_reap(&jman);*/
   }
 
   exit(EXIT_SUCCESS);
