@@ -311,16 +311,15 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
             _exit(EXIT_FAILURE);
           dfl_action.sa_flags = 0;
 
-          /*
-          int i = 0;
-          char *args[MAX_ARGUMENT+1];
+
+          int i = 1;
+          char *args[MAX_ARGUMENT+2];
+          args[0] = embryos[index].program;
           for(;i<embryos[index].num_args;i++){
             args[i] = embryos[index].arguments[i];
           }
-          args[i] = NULL;*/
+          args[i] = NULL;
 
-          char **args = ((char **)embryos[index].arguments);
-          args[embryos[index].num_args] = NULL;
 
           if(!set){ //since chld receives copy of parent,
                     //after parent sets this once each child will see the change
@@ -346,7 +345,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
             _exit(EXIT_FAILURE);
 
           int err = 1;
-          if(embryos[index].internal_key!=NONE){
+          if(embryos[index].internal_key==NONE){
             //exec
             execv(args[0],args);
             //exec failed notify parent and exit
