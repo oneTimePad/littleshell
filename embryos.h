@@ -5,7 +5,7 @@
 #define MAX_ARG_LEN 1000
 #define MAX_JOB_NAME 100
 #define MAX_JOBS 500
-
+#define MAX_EMBRYOS 50
 //used for storing info on a process to be created
 //an embryo process is one queued to be forked, but not yet forked
 typedef struct _EMBRYO_PROCESS{

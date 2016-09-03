@@ -10,7 +10,7 @@
 #include "jobmanager.h"
 #include "execute.h"
 
-#define MAX_EMBRYOS 2500
+
 #define MAX_LINE_LEN 100000
 
 #endif

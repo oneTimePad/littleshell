@@ -29,6 +29,7 @@ _BOOL job_manager_init(JMANAGER *jman){
     for(;i<MAX_JOBS;i++){
       jman->jobpgrids[i]=-1;
     }
+    jman->current_job =1;
     jman->recent_foreground_job_status = 0;
 
     return TRUE;
@@ -52,7 +53,7 @@ int find_empty_job(JMANAGER *jman){
     }
   }
   jman->current_job = job;
-  return job+1;
+  return job;
 }
 
 

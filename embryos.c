@@ -155,6 +155,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   new_proc->p_pipe_read = -1;
   new_proc->p_stdin = -1;
   new_proc->p_stdout = -1;
+  return TRUE;
 
 }
 
@@ -192,7 +193,7 @@ _BOOL embryos_init(TOKENS *tkns,EMBRYO* procs, EMBRYO_INFO* info){
   char *cur_tkn;
   int which = CURR_TOKEN;
 
-  while((cur_tkn = getToken(tkns,which))!=NULL){
+  for(;(cur_tkn = getToken(tkns,which))!=NULL;which=NEXT_TOKEN){
       switch (isSensitive(cur_tkn)) {
         //if not a sensitive character
         case 0:{

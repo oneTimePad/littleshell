@@ -52,22 +52,25 @@ int main(int argc, char *argv[]){
     if(bytes_read==-1){
       continue;
     }
-    /*
+
     //perform tokenization
     if(!initializeTokens(&curr_tkn,input_buf,bytes_read)){
       free(input_buf);
       continue;
     }
     free(input_buf);
-    if(strcmp(getToken(&curr_tkn,CURR_TOKEN),"exit") == 0)
+
+    if(strcmp(getToken(&curr_tkn,CURR_TOKEN),"exit") == 0){
       shell_exit(TRUE,&jman,&curr_tkn);
+    }
 
     EMBRYO embryos[MAX_EMBRYOS];
-    memset(&embryos,0,MAX_EMBRYOS*sizeof(EMBRYO));
+    memset(embryos,0,MAX_EMBRYOS*sizeof(EMBRYO));
     EMBRYO_INFO info;
     memset(&info,0,sizeof(EMBRYO_INFO));
     info.cur_proc = -1;
     info.fork_seq =  1;
+
     _BOOL ret;
     while((ret=execute(&jman,&curr_tkn,embryos,&info)) == FALSE && errno ==0 && info.last_sequence!='\0'){
       destroyTokens(&curr_tkn);
@@ -99,7 +102,7 @@ int main(int argc, char *argv[]){
 
     //clean up
     destroyTokens(&curr_tkn);
-    job_reap(&jman);*/
+    job_reap(&jman);
   }
 
   exit(EXIT_SUCCESS);
