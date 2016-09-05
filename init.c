@@ -14,7 +14,7 @@
 * term_handler: fct ptr to handler for SIGTERM
 * returns: status
 **/
-static _BOOL signals_init(void (*term_handler)(int)){
+static _BOOL signals_init(void (*term_handler)(int),void (*chld_handler)(int),void (*hup_handler)(int)){
   //ignore termination and suspension
   struct sigaction ign_action;
   ign_action.sa_handler = SIG_IGN;
@@ -31,14 +31,19 @@ static _BOOL signals_init(void (*term_handler)(int)){
     return FALSE;
 
   //set term disposition
-  struct sigaction term_action;
-  term_action.sa_flags = 0;
-  term_action.sa_handler = term_handler;
-  if(sigemptyset(&term_action.sa_mask) ==-1)
+  struct sigaction handler_action;
+  handler_action.sa_flags = 0;
+  handler_action.sa_handler = term_handler;
+  if(sigemptyset(&handler_action.sa_mask) ==-1)
     return FALSE;
-  if(sigaction(SIGTERM,&term_action,NULL)==-1)
+  if(sigaction(SIGTERM,&handler_action,NULL)==-1)
     return FALSE;
-
+  handler_action.sa_handler = chld_handler;
+  if(sigaction(SIGCHLD,&handler_action,NULL) == -1)
+    return FALSE;
+  handler_action.sa_handler = hup_handler;
+  if(sigaction(SIGHUP,&handler_action, NULL) == -1)
+    return FALSE;
   //block some signals
   sigset_t blockset;
   if(sigemptyset(&blockset) == -1)
@@ -120,7 +125,7 @@ static _BOOL line_init(char *line, size_t line_size){
 **/
 _BOOL shell_init(INIT *init){
   if(init == NULL){errno = EINVAL; return FALSE;}
-  if(!signals_init(init->term_handler))
+  if(!signals_init(init->term_handler,init->chld_handler,init->hup_handler))
     return FALSE;
   if(!path_init(init->path))
     return FALSE;

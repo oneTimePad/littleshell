@@ -9,6 +9,8 @@
 
 typedef struct _INIT{
   void (*term_handler)(int);
+  void (*chld_handler)(int);
+  void (*hup_handler) (int);
   char *path;
   JMANAGER *jman;
   char *line;

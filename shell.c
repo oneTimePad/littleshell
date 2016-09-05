@@ -13,6 +13,10 @@ void term_handler(int sig){
     term_signal = 1;
 }
 
+volatile sig_atomic_t chld_signal = 0;
+void chld_handler(int sig){
+     chld_signal = 1;
+}
 
 
 int main(int argc, char *argv[]){
@@ -26,6 +30,8 @@ int main(int argc, char *argv[]){
   init_opt.line = line;
   init_opt.line_size = MAX_LINE_LEN;
   init_opt.term_handler = &term_handler;
+  init_opt.chld_handler = &chld_handler;
+  init_opt.hup_handler  = &term_handler;
   //initialize the shell
   if(!shell_init(&init_opt))
     errnoExit("shell_init()");
@@ -47,9 +53,10 @@ int main(int argc, char *argv[]){
     fflush(stdout);
     ssize_t bytes_read = getline(&input_buf,&nbytes,stdin);
     TOKENS curr_tkn;
-
-    job_reap(&jman);
-
+    if(chld_signal){
+    	job_reap(&jman);
+    	chld_signal = 0;
+    }
     if(bytes_read==-1){
       continue;
     }
@@ -101,9 +108,11 @@ int main(int argc, char *argv[]){
     }
 
 
-    //clean up
-    destroyTokens(&curr_tkn);
-    job_reap(&jman);
+    //clean up    destroyTokens(&curr_tkn);
+    if(chld_signal){
+    	job_reap(&jman);
+    	chld_signal = 0;
+    }
   }
 
   exit(EXIT_SUCCESS);
