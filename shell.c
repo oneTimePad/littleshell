@@ -38,6 +38,7 @@ int main(int argc, char *argv[]){
       shell_exit(TRUE,&jman,NULL);
     }
 
+    tcsetpgrp(0,getpid());
     //read use input to shell
 
     size_t nbytes=0;

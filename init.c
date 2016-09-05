@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <string.h>
 #include <pwd.h>
+#include "errors.h"
 #include "init.h"
 
 
@@ -43,6 +44,8 @@ static _BOOL signals_init(void (*term_handler)(int)){
   if(sigemptyset(&blockset) == -1)
     return FALSE;
   if(sigaddset(&blockset,SYNC_SIG)==-1)
+    return FALSE;
+  if(sigaddset(&blockset,SIGTTOU) == -1)
     return FALSE;
   if(sigprocmask(SIG_BLOCK,&blockset,NULL)==-1)
     return FALSE;

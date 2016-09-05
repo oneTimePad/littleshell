@@ -12,8 +12,8 @@
 
 
 
-inline void errnoExit(const char* fct_name);
-inline  void usageExit(const char* format,...);
-
+ void errnoExit(const char* );
+ void usageExit(const char* ,...);
+ void errExit(const char*,...);
 
 #endif

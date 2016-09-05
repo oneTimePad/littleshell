@@ -84,7 +84,7 @@ _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
 
   info->fork_seq++;
   info->background[info->fork_seq-1] = FALSE;
-  info->last_sequence = which;
+  info->last_sequence = '\0';
   return TRUE;
 }
 
@@ -110,6 +110,7 @@ _BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, char *name){
   }
   //change stdin to pipe read
   embryos[info->cur_proc].p_stdin = embryos[info->cur_proc-1].p_pipe_read;
+  info->last_sequence = '\0';
   return TRUE;
 }
 
@@ -133,6 +134,7 @@ _BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
   else
     embryos[info->cur_proc].p_stdout = fd;
 
+  info->last_sequence = '\0';
   return TRUE;
 
 }
