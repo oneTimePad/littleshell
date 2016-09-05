@@ -79,11 +79,10 @@ _BOOL pre_ampersan_handler(EMBRYO *embryos, EMBRYO_INFO *info, char which){
   if(!add_to_job_name(info,which))
     return FALSE;
   //set all processes in pipe to background
-  if(which == ANDIN)
+  if(which == BACK_GR)
     info->background[info->fork_seq-1] = TRUE;
-
+ 
   info->fork_seq++;
-  info->background[info->fork_seq-1] = FALSE;
   info->last_sequence = '\0';
   return TRUE;
 }
