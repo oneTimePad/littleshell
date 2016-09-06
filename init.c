@@ -32,7 +32,7 @@ static _BOOL signals_init(void (*term_handler)(int),void (*chld_handler)(int),vo
 
   //set term disposition
   struct sigaction handler_action;
-  handler_action.sa_flags = 0;
+  handler_action.sa_flags = SA_RESTART;
   handler_action.sa_handler = term_handler;
   if(sigemptyset(&handler_action.sa_mask) ==-1)
     return FALSE;
