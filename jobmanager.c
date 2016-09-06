@@ -74,13 +74,16 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
   int status;
   pid_t pid;
   int waited = 0;
+  printf("%d\n",job);
   //wait for all processes in the foreground group
   while(waited !=num_procs && (pid = waitpid(-1*pgid,&status,WUNTRACED))!=-1){
   	waited++;
   }
 
-  if(pid ==-1)
+  if(pid ==-1){
+	  printf("%ld\n",(long)pgid);
     return FALSE;
+  }
   if(!job_status(jman,job,status,FALSE))
     return FALSE;
 
@@ -226,11 +229,12 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
     errno = EINVAL;
     return FALSE;
   }
-
-  if(kill(jman->jobpgrids[job-1],SIGCONT) == -1)
+   
+  if(kill(-1*jman->jobpgrids[job-1],SIGCONT) == -1)
     return FALSE;
   jman->suspendedstatus[job-1] = TRUE;
 
+ 
   if(!ground){
     if(!job_wait_foreground(jman,job))
       return FALSE;
@@ -328,8 +332,8 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
           int i = 1;
           char *args[MAX_ARGUMENT+2];
           args[0] = embryos[index].program;
-          for(;i<embryos[index].num_args;i++){
-            args[i] = embryos[index].arguments[i];
+          for(;i<=embryos[index].num_args;i++){
+            args[i] = embryos[index].arguments[i-1];
           }
           args[i] = NULL;
 
@@ -445,7 +449,9 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
       if(!job_wait_foreground(jman,job))
         return FALSE;
     }
-
+    else{
+      printf("[%ld]\n",jman->lastprocpid[job-1]);
+    }
     //if there are more embryos
     if(index<num_embryos){
         //if not wait for the current foreground group

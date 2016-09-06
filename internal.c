@@ -87,13 +87,13 @@ static void shell_foreground(JMANAGER* jman,char **args){
   if(error)
     _exit(EXIT_FAILURE);
   int job = atoi(pid);
-  printf("%d\n",job);
+  
   if(job<=0 || job> MAX_JOBS){
     fprintf(stderr,"no such job\n");
     _exit(EXIT_FAILURE);
   }
   if(!job_ground_change(jman,job,FALSE)){
-    fprintf(stderr,"failed to forground process %ld\n",(long)job);
+    fprintf(stderr,"failed to forground process %ld\n",(long)errno);
     _exit(EXIT_FAILURE);
   }
   return _exit(EXIT_SUCCESS);
