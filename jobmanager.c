@@ -71,7 +71,7 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
   pid_t pid;
   int waited = 0;
   //wait for all processes in the foreground group
-  while(waited !=num_procs && (pid = waitpid(-1*job,&status,WUNTRACED))!=-1){
+  while(waited !=num_procs && (pid = waitpid(-1*pgid,&status,WUNTRACED))!=-1){
   	waited++;
   }
 
@@ -204,7 +204,7 @@ _BOOL job_destroy(JMANAGER *jman, int job){
   jman->jobpgrids[job-1] = -1;
   jman->suspendedstatus[job-1] = FALSE;
   jman->numprocs[job-1] = 0;
-  jman->curprocs[job-1] =0;
+  jman->curprocs[job-1] =-1;
 }
 
 
@@ -431,12 +431,12 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
       index++;
     }
 
-    jman->lastprocpid[fork_seq-1] = pid;
-    jman->numprocs[fork_seq-1] = num_procs;
-    jman->curprocs[fork_seq-1] = num_procs;
+    jman->lastprocpid[job-1] = pid;
+    jman->numprocs[job-1] = num_procs;
+    jman->curprocs[job-1] = num_procs;
 
     if(!info->background[fork_seq-1]){
-      if(!job_wait_foreground(jman,fork_seq))
+      if(!job_wait_foreground(jman,job))
         return FALSE;
     }
 
