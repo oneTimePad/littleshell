@@ -52,6 +52,7 @@ _BOOL inPath(char *file,char* fpath,size_t size){
           return FALSE;
       }
   }
+  return FALSE;
 
 
 

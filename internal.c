@@ -74,7 +74,7 @@ static void shell_foreground(JMANAGER* jman,char **args){
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
   args++;
-  while(args!=NULL){
+  while(*args!=NULL){
     if(!got_pid)
       pid = *args;
     else{
@@ -108,7 +108,7 @@ static void shell_background(JMANAGER* jman, char **args){
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
   args++;
-  while(args!=NULL){
+  while(*args!=NULL){
     if(!got_pid)
       pid = *args;
     else{
@@ -140,7 +140,7 @@ static void shell_background(JMANAGER* jman, char **args){
 static void shell_echo(JMANAGER* jman,char **args){
   _BOOL error = FALSE;
   args++;
-  while(args!=NULL){
+  while(*args!=NULL){
     fprintf(stderr,"unknown argument %s\n",*args);
     error = TRUE;
     args++;
@@ -159,7 +159,7 @@ static void shell_echo(JMANAGER* jman,char **args){
 static void shell_help(const char* format,char **args){
   _BOOL error = FALSE;
   args++;
-  while(args!=NULL){
+  while(*args!=NULL){
     fprintf(stderr,"unknown argument %s\n",*args);
     error = TRUE;
     args++;
@@ -184,7 +184,7 @@ static void shell_help(const char* format,char **args){
 static void shell_dump(JMANAGER *jman,char **args){
   _BOOL error = FALSE;
   args++;
-  while(args!=NULL){
+  while(*args!=NULL){
     fprintf(stderr,"unknown argument %s\n",*args);
     error = TRUE;
     args++;

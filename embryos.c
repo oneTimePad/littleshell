@@ -138,7 +138,7 @@ _BOOL embryo_create(EMBRYO *procs,EMBRYO_INFO *info, char *name){
   }
   short key = NONE;
   new_proc->internal_key = NONE;
-  if(((strstr(name,"/")!= NULL) ? strcpy(new_proc->program,name) :( (inPath(name,new_proc->program,PATH_LIM)&& (key=inInternal(name))==NONE) ? new_proc->program : NULL) ) ==NULL){
+  if(((strstr(name,"/")!= NULL) ? strcpy(new_proc->program,name) :( (key=inInternal(name)) && inPath(name,new_proc->program,PATH_LIM))? new_proc->program : NULL)  ==NULL){
     //it might be a command internal to the shell
     if(key!=NONE){
       new_proc->internal_key = key;
