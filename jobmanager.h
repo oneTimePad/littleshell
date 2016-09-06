@@ -24,6 +24,8 @@ extern const char * const sys_siglist[];
 typedef struct _JMANAGER{
   char jobnames[MAX_JOB_NAME][MAX_JOBS];
   pid_t jobpgrids[MAX_JOBS];
+  pid_t numprocs[MAX_JOBS];
+  pid_t curprocs[MAX_JOBS];
   pid_t lastprocpid[MAX_JOBS];
   _BOOL suspendedstatus[MAX_JOBS];
   int recent_foreground_job_status;

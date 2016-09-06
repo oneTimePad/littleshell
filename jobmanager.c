@@ -66,10 +66,17 @@ int find_empty_job(JMANAGER *jman){
 _BOOL job_wait_foreground(JMANAGER *jman, int job){
   if(job == -1){errno = EINVAL; return FALSE;} //never happens
   pid_t pgid = jman->jobpgrids[job-1];
+  int num_procs = jman->numprocs[job-1];
   int status;
   pid_t pid;
+  int waited = 0;
   //wait for all processes in the foreground group
-  while((pid = waitpid(-1*job,&status,WUNTRACED))!=-1);
+  while(waited !=num_procs && (pid = waitpid(-1*job,&status,WUNTRACED))!=-1){
+  	waited++;
+  }
+
+  if(pid ==-1)
+    return FALSE;
   if(!job_status(jman,job,status,FALSE))
     return FALSE;
 
@@ -83,26 +90,24 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
 **/
 _BOOL job_reap(JMANAGER *jman){
   int status; //status returned by waitpid
-  pid_t pid; // pid returned by waitpid
-  pid_t pgid; //pgid to wait on
+  pid_t pid= -1; // pid returned by waitpid
+  pid_t pgid = -1; //pgid to wait on
   int job =1;
   //loop though all jobs
   for(;job<=MAX_JOBS; job++){
-    int tmp_status; // status returned by waitpid
-    pid_t tmp_pid =-1; //pid returned by waitpid
     //if a job is active
     if((pgid=jman->jobpgrids[job-1])!=-1){
       errno = 0;
       //check if any procs in that job have changed status
-      while((tmp_pid = waitpid(-1*pgid,&tmp_status,WNOHANG | WUNTRACED | WCONTINUED)) !=0 && tmp_pid!=-1){
-        status = tmp_status; //store the last status
-        pid = tmp_pid; //this is needed since all procs have been stopped -1 will never be returned
-                      //this checks if a proc was returned at some point
+      while((pid = waitpid(-1*pgid,&status,WNOHANG | WUNTRACED | WCONTINUED)) !=0 && pid!=-1){
+	      jman->curprocs[job-1]--;
       }
-      if(errno == ECHILD || pid != -1){ //no more procs left or proceses were stopped or continued
-        job_status(jman,job,status,TRUE);
+      if(jman->curprocs[job-1]==0){ //no more procs left or proceses were stopped or continued
+        jman->curprocs[job-1] = jman->numprocs[job-1];
+	job_status(jman,job,status,TRUE);
+
       }
-      else if(errno !=ECHILD && errno != 0 && tmp_pid==-1)
+      else if(pid == -1 && errno != ECHILD)
         return FALSE; //an error
     }
   }
@@ -198,8 +203,8 @@ _BOOL job_destroy(JMANAGER *jman, int job){
   memset(jman->jobnames[job-1],0,MAX_JOB_NAME);
   jman->jobpgrids[job-1] = -1;
   jman->suspendedstatus[job-1] = FALSE;
-
-
+  jman->numprocs[job-1] = 0;
+  jman->curprocs[job-1] =0;
 }
 
 
@@ -262,10 +267,12 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
     errno = ENOMEM;
     return FALSE;
   }
+  int num_procs = 0;
   int fork_seq = embryos[index].fork_seq; //current set of forked processes
   _BOOL end = FALSE;
   while(!end){
     _BOOL set = FALSE;
+    num_procs = 0;
     while(index<num_embryos && embryos[index].fork_seq == fork_seq){
       int pipes[2];
       if(pipe(pipes) == -1)
@@ -286,7 +293,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
           //duplicate stdin if necessary
           int fd_in;
           if((fd_in = embryos[index].p_stdin)!=-1 && fd_in!=STDIN_FILENO){
-            if(dup2(fd_in,STDIN_FILENO) == -1)
+            if(dup2(fd_in,0) == -1)
               _exit(EXIT_FAILURE);
             if(close(fd_in) == -1)
               _exit(EXIT_FAILURE);
@@ -295,7 +302,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
           //duplicate stdout if necessary
           int fd_out;
           if((fd_out = embryos[index].p_stdout)!=-1 && fd_out!=STDOUT_FILENO){
-            if(dup2(fd_out,STDOUT_FILENO) == -1)
+            if(dup2(fd_out,1) == -1)
               _exit(EXIT_FAILURE);
             if(close(fd_out) == -1)
               _exit(EXIT_FAILURE);
@@ -368,6 +375,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
         }
         //parent
         default:{
+	  num_procs++;
           if(close(pipes[1]) == -1)
             return FALSE;
           //close unused fd
@@ -391,7 +399,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
             strcpy(jman->jobnames[job-1],info->forkseqname[job-1]);
             jman->jobpgrids[job-1] = pid;
             setpgid(pid,pid);
-            tcsetpgrp(STDIN_FILENO,pid); //set forground proc group
+            tcsetpgrp(0,pid); //set forground proc group
             set = TRUE;
             if(kill(pid,SYNC_SIG) == -1) //sync with child foreground proc group set
               return FALSE;
@@ -424,7 +432,8 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
     }
 
     jman->lastprocpid[fork_seq-1] = pid;
-
+    jman->numprocs[fork_seq-1] = num_procs;
+    jman->curprocs[fork_seq-1] = num_procs;
 
     if(!info->background[fork_seq-1]){
       if(!job_wait_foreground(jman,fork_seq))
@@ -446,7 +455,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
         }
     }
     else{
-      jman->current_job = job;
+      jman->current_job = job+1;
       end = TRUE;
     }
 
