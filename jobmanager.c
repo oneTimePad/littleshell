@@ -42,16 +42,20 @@ _BOOL job_manager_init(JMANAGER *jman){
 * returns: job index +1, -1 on error
 **/
 int find_empty_job(JMANAGER *jman){
+  _BOOL looped = FALSE;
   int job = jman->current_job;
   while(jman->jobpgrids[job-1]!=-1){
-    if(job == jman->current_job){
+    if(looped &&job == jman->current_job && jman->jobpgrids[job-1]!=-1){
       errno = ENOMEM;
       return -1;
     }
     else if(job == MAX_JOBS){
-      job = 0;
+      job = 1;
+      looped = TRUE;
     }
+    job++;
   }
+  
   jman->current_job = job;
   return job;
 }
@@ -200,11 +204,13 @@ _BOOL job_status(JMANAGER *jman,int job, int status,_BOOL ground){
 * job: job to clean up
 **/
 _BOOL job_destroy(JMANAGER *jman, int job){
+  
   memset(jman->jobnames[job-1],0,MAX_JOB_NAME);
   jman->jobpgrids[job-1] = -1;
   jman->suspendedstatus[job-1] = FALSE;
   jman->numprocs[job-1] = 0;
   jman->curprocs[job-1] =-1;
+ 
 }
 
 
@@ -396,7 +402,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
           //setup process entry
           if(!set){
 
-            strcpy(jman->jobnames[job-1],info->forkseqname[job-1]);
+            strcpy(jman->jobnames[job-1],info->forkseqname[fork_seq-1]);
             jman->jobpgrids[job-1] = pid;
             setpgid(pid,pid);
             tcsetpgrp(0,pid); //set forground proc group
@@ -455,7 +461,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
         }
     }
     else{
-      jman->current_job = job+1;
+      jman->current_job = job;
       end = TRUE;
     }
 
