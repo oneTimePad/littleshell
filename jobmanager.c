@@ -342,12 +342,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
               _exit(EXIT_FAILURE);
           }
 
-	  if(write(1,"lol",4) <= 0){
-		perror("write");
-	  }
-	  if(write(3,"ooo",4) <=0){
-		perror("write");
-	  }
+	 
 
           //duplicate stdout if necessary
           int fd_out;
@@ -358,9 +353,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
               _exit(EXIT_FAILURE);
           }
 
-	  if(write(1,"hello",6) <= 0){
-		  perror("write");
-	  }
+	 
  	  //create the args list
 
 
