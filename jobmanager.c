@@ -81,7 +81,6 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
   }
 
   if(pid ==-1){
-	  printf("%ld\n",(long)pgid);
     return FALSE;
   }
   if(!job_status(jman,job,status,FALSE))
@@ -298,12 +297,15 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
           if(!execute_internal(-1,embryos[index].internal_key,jman,args)){
              perror("internal_command");
           }
-	  index++;
-	  if(index >= num_embryos){
-            return TRUE;
+ 	  if(num_embryos == 1){
+		return TRUE;
+	  }		
+	 else  if(index+1 >= num_embryos){
+            index++;
+            break;
 	  }
-	  else if(embryos[index].fork_seq != fork_seq){
-	  	fork_seq = embryos[index].fork_seq;
+	  else if(embryos[index+1].fork_seq != fork_seq){
+	  	fork_seq = embryos[index+1].fork_seq;
 		continue;
 	  }
 
