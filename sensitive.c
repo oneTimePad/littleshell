@@ -122,11 +122,23 @@ _BOOL post_pipe_handler(EMBRYO *embryos,EMBRYO_INFO *info, char *name){
 * returns: status
 **/
 _BOOL post_redirio_handler(EMBRYO *embryos, EMBRYO_INFO *info, char *name){
-
+  errno = 0;
   int fd;
-  if((fd = open(name, (info->last_sequence==RDR_SIN)? O_RDONLY :O_WRONLY | (info->last_sequence==RDR_SOT_A) ? O_APPEND : 1) ) == -1){
-    return FALSE;
+  if((fd = open(name, (info->last_sequence==RDR_SIN)? O_RDONLY :(info->last_sequence==RDR_SOT_A) ? O_APPEND | O_WRONLY : O_WRONLY) ) == -1){
+	if(errno = ENOENT && info->last_sequence!= RDR_SIN){
+		errno = 0;
+		fd = open(name,O_CREAT | O_EXCL | O_WRONLY,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH); //rw-r-r
+		if(fd == -1){
+			return FALSE;
+		}
+	}
+	else{
+		return FALSE;
+	}	
+
+
   }
+
 
   if(info->last_sequence == RDR_SIN)
     embryos[info->cur_proc].p_stdin = fd;

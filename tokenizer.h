@@ -6,10 +6,10 @@
 #define PIPE      (char)-1 // '|'
 #define RDR_SIN   (char)-2 // '<'
 #define RDR_SOT   (char)-3 // '>'
-#define RDR_SIN_A (char)-4 // '<<'
-#define RDR_SOT_A (char)-5 // '>>'
-#define BACK_GR   (char)-6 // '&'
-#define ANDIN     (char)-7 // '&&'
+#define RDR_SIN_A (char)-8 // '<<'
+#define RDR_SOT_A (char)-4 // '>>'
+#define BACK_GR   (char)-5 // '&'
+#define ANDIN     (char)-6 // '&&'
 
 
 #define CURR_TOKEN (int)1
