@@ -40,7 +40,7 @@ typedef struct _EMBRYO_INFO{
 
 int isSensitive(char *);
 _BOOL add_to_job_name(EMBRYO_INFO *,char);
-_BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *);
+_BOOL embryo_clean(EMBRYO *,EMBRYO_INFO *,_BOOL);
 _BOOL embryo_create(EMBRYO *,EMBRYO_INFO *, char *);
 _BOOL embryo_arg(EMBRYO *,EMBRYO_INFO *, char *);
 _BOOL embryos_init(TOKENS *tkns,EMBRYO* , EMBRYO_INFO*);

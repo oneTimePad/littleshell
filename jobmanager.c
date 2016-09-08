@@ -74,7 +74,7 @@ _BOOL job_wait_foreground(JMANAGER *jman, int job){
   int status;
   pid_t pid;
   int waited = 0;
-  printf("%d\n",job);
+  
   //wait for all processes in the foreground group
   while(waited !=num_procs && (pid = waitpid(-1*pgid,&status,WUNTRACED))!=-1){
   	waited++;

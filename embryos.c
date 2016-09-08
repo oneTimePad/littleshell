@@ -67,7 +67,7 @@ _BOOL add_to_job_name(EMBRYO_INFO *info,char which){
 * procs: list of embryos created
 * info: info struct about the embryos created
 */
-_BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
+_BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info,_BOOL failure){
   if(info->cur_proc == -1)return TRUE;
   /*
   if(info->pipe_present && procs[info->cur_proc-1].p_pipe_read!=-1){
@@ -78,6 +78,7 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
   int num_procs = info->cur_proc;
   int index = 0;
 
+  if(failure){
   for(;index < num_procs;index++){
 
     if(procs[index].p_stdout!=-1 && procs[index].p_pipe_read==-1){
@@ -88,6 +89,7 @@ _BOOL embryo_clean(EMBRYO *procs,EMBRYO_INFO *info){
       if(close(procs[index].p_stdin) == -1)
         return FALSE;
     }
+  }
   }
   return TRUE;
 }

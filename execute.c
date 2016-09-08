@@ -18,12 +18,12 @@ _BOOL execute(JMANAGER *jman, TOKENS *tkns,EMBRYO *embryos,EMBRYO_INFO *info){
 
   //reset continuing to remove ambiguity since processes_init returns errno 0 on failure sometimes too
   if(!jobs_init(jman,embryos,info)){
-    embryo_clean(embryos,info);
+    embryo_clean(embryos,info,TRUE);
     return FALSE;
   }
   //clean up embryos
-  //if(!embryo_clean(embryos,info))
-   // return FALSE;
+  if(!embryo_clean(embryos,info,FALSE))
+    return FALSE;
 
   return TRUE;
 
