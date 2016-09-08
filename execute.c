@@ -22,8 +22,8 @@ _BOOL execute(JMANAGER *jman, TOKENS *tkns,EMBRYO *embryos,EMBRYO_INFO *info){
     return FALSE;
   }
   //clean up embryos
-  if(!embryo_clean(embryos,info))
-    return FALSE;
+  //if(!embryo_clean(embryos,info))
+   // return FALSE;
 
   return TRUE;
 
