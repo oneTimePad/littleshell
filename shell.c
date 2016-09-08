@@ -42,6 +42,7 @@ int main(int argc, char *argv[]){
   while(1){
     if(term_signal){
       shell_exit(TRUE,&jman,NULL);
+      exit(EXIT_SUCCESS);
     }
 
     tcsetpgrp(0,getpid());
@@ -70,6 +71,7 @@ int main(int argc, char *argv[]){
 
     if(strcmp(getToken(&curr_tkn,CURR_TOKEN),"exit") == 0){
       shell_exit(TRUE,&jman,&curr_tkn);
+      exit(EXIT_SUCCESS);
     }
 
     EMBRYO embryos[MAX_EMBRYOS];

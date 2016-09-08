@@ -12,9 +12,9 @@
 #define HELP   6
 #define NONE  -1
 
-
+#define NO_FORK(key) ((key == JOBS) ? TRUE : (key == FG) ? TRUE : FALSE)              
 short inInternal(char *);
-void shell_exit(_BOOL,JMANAGER *,TOKENS *);
+_BOOL shell_exit(_BOOL,JMANAGER *,TOKENS *);
 _BOOL execute_internal(int ,short,JMANAGER *,char **);
 
 #endif

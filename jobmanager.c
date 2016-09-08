@@ -232,7 +232,7 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
    
   if(kill(-1*jman->jobpgrids[job-1],SIGCONT) == -1)
     return FALSE;
-  jman->suspendedstatus[job-1] = TRUE;
+  jman->suspendedstatus[job-1] = FALSE;
 
  
   if(!ground){
@@ -283,7 +283,38 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
   while(!end){
     _BOOL set = FALSE;
     num_procs = 0;
+    		
+    
     while(index<num_embryos && embryos[index].fork_seq == fork_seq){
+      if(NO_FORK(embryos[index].internal_key) || (num_embryos==1 && embryos[index].internal_key != NONE) ){
+	  int i = 1;
+          char *args[MAX_ARGUMENT+2];
+          args[0] = embryos[index].program;
+          for(;i<=embryos[index].num_args;i++){
+            args[i] = embryos[index].arguments[i-1];
+          }
+          args[i] = NULL;
+	  errno = 0;
+          if(!execute_internal(-1,embryos[index].internal_key,jman,args)){
+             perror("internal_command");
+          }
+	  index++;
+	  if(index >= num_embryos){
+            return TRUE;
+	  }
+	  else if(embryos[index].fork_seq != fork_seq){
+	  	fork_seq = embryos[index].fork_seq;
+		continue;
+	  }
+
+
+
+
+
+  
+      }
+      else{      
+        
       int pipes[2];
       if(pipe(pipes) == -1)
         return FALSE;
@@ -336,6 +367,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
             args[i] = embryos[index].arguments[i-1];
           }
           args[i] = NULL;
+
 
 
           if(!set){ //since chld receives copy of parent,
@@ -436,6 +468,7 @@ _BOOL jobs_init(JMANAGER *jman,EMBRYO *embryos,EMBRYO_INFO *info){
 
           break;
         }
+      }
       }
 
       index++;

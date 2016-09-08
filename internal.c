@@ -45,7 +45,7 @@ short inInternal(char *cmd){
 * tkns: token manager
 * no return
 **/
-void shell_exit(_BOOL TERM_SHELL,JMANAGER* jman,TOKENS* tkns){
+_BOOL shell_exit(_BOOL TERM_SHELL,JMANAGER* jman,TOKENS* tkns){
   if(TERM_SHELL){
     //terminate all processes
     int i =0;
@@ -57,10 +57,10 @@ void shell_exit(_BOOL TERM_SHELL,JMANAGER* jman,TOKENS* tkns){
     if(tkns!=NULL)
       destroyTokens(tkns);
 
-    exit(EXIT_SUCCESS);
+    return TRUE;
   }
   else{
-    _exit(EXIT_SUCCESS);
+    return TRUE;
   }
 }
 
@@ -69,7 +69,7 @@ void shell_exit(_BOOL TERM_SHELL,JMANAGER* jman,TOKENS* tkns){
 * jman: job manager
 * args: string of args
 **/
-static void shell_foreground(JMANAGER* jman,char **args){
+static _BOOL shell_foreground(JMANAGER* jman,char **args){
   char *pid;
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
@@ -85,18 +85,18 @@ static void shell_foreground(JMANAGER* jman,char **args){
   }
 
   if(error)
-    _exit(EXIT_FAILURE);
+    return FALSE;
   int job = atoi(pid);
   
   if(job<=0 || job> MAX_JOBS){
     fprintf(stderr,"no such job\n");
-    _exit(EXIT_FAILURE);
+    return FALSE;
   }
   if(!job_ground_change(jman,job,FALSE)){
     fprintf(stderr,"failed to forground process %ld\n",(long)errno);
-    _exit(EXIT_FAILURE);
+    return FALSE;
   }
-  return _exit(EXIT_SUCCESS);
+  return TRUE;
 }
 
 /**
@@ -104,7 +104,7 @@ static void shell_foreground(JMANAGER* jman,char **args){
 * pman: process manager
 * args: string of args
 **/
-static void shell_background(JMANAGER* jman, char **args){
+static _BOOL shell_background(JMANAGER* jman, char **args){
   char *pid;
   _BOOL error = FALSE;
   _BOOL got_pid = FALSE;
@@ -120,17 +120,17 @@ static void shell_background(JMANAGER* jman, char **args){
   }
 
   if(error)
-    _exit(EXIT_FAILURE);
+   return FALSE;
   int job = atoi(pid);
   if(job<=0 || job> MAX_JOBS){
     fprintf(stderr,"no such job\n");
-    _exit(EXIT_FAILURE);
+    return FALSE;
   }
   if(!job_ground_change(jman,job,TRUE)){
     fprintf(stderr,"failed to forground process %ld\n",(long)job);
-    _exit(EXIT_FAILURE);
+    return FALSE;
   }
-  return _exit(EXIT_SUCCESS);
+  return TRUE;
 }
 
 /**
@@ -138,7 +138,7 @@ static void shell_background(JMANAGER* jman, char **args){
 * pman: process manager
 * args: string of args
 **/
-static void shell_echo(JMANAGER* jman,char **args){
+static _BOOL shell_echo(JMANAGER* jman,char **args){
   _BOOL error = FALSE;
   args++;
   while(*args!=NULL){
@@ -147,9 +147,9 @@ static void shell_echo(JMANAGER* jman,char **args){
     args++;
   }
   if(error)
-    _exit(EXIT_FAILURE);
+    return FALSE;
   printf("%d\n",jman->recent_foreground_job_status);
-  _exit(EXIT_SUCCESS);
+  return TRUE;
 }
 
 /**
@@ -157,7 +157,7 @@ static void shell_echo(JMANAGER* jman,char **args){
 * format: format for help string printing
 * args: string of args
 **/
-static void shell_help(const char* format,char **args){
+static _BOOL shell_help(const char* format,char **args){
   _BOOL error = FALSE;
   args++;
   while(*args!=NULL){
@@ -167,14 +167,14 @@ static void shell_help(const char* format,char **args){
   }
 
   if(error)
-    _exit(EXIT_FAILURE);
+    return FALSE;
 
  fflush(stdout);
  printf("Below is the following internal commands: \n");
  char** help = help_info;
  for(;*help!=NULL;help++)
   printf(format,*help);
- _exit(EXIT_SUCCESS);
+ return TRUE;
 }
 
 /**
@@ -182,7 +182,7 @@ static void shell_help(const char* format,char **args){
 * pman: process manager
 * args: string of arguments
 **/
-static void shell_dump(JMANAGER *jman,char **args){
+static _BOOL shell_dump(JMANAGER *jman,char **args){
   _BOOL error = FALSE;
   args++;
   while(*args!=NULL){
@@ -192,10 +192,10 @@ static void shell_dump(JMANAGER *jman,char **args){
   }
 
   if(error)
-    _exit(EXIT_FAILURE);
+    return FALSE;
   if(!jobs_dump(jman))
-    _exit(EXIT_FAILURE);
-  _exit(EXIT_SUCCESS);
+    return FALSE;
+  return TRUE;
 }
 
 
@@ -210,46 +210,38 @@ static void shell_dump(JMANAGER *jman,char **args){
 **/
 _BOOL execute_internal(int pipe_end,short key,JMANAGER* jman,char **args){
   if(jman == NULL || args == NULL){errno = EINVAL; return FALSE;}
+  if(pipe_end != -1){
+    if(close(pipe_end) ==-1){
+	    _exit(EXIT_FAILURE);
+    }
+  }
+  _BOOL ret = FALSE;
   switch(key){
     case JOBS:
-        if(close(pipe_end) == -1){
-          _exit(EXIT_FAILURE);
-        }
-        shell_dump(jman,args);
+        ret = shell_dump(jman,args);
         break;
     case FG:
-        if(close(pipe_end) == -1){
-          _exit(EXIT_FAILURE);
-        }
-        shell_foreground(jman,args);
+        ret = shell_foreground(jman,args);
         break;
     case BG:
-        if(close(pipe_end) == -1){
-          _exit(EXIT_FAILURE);
-        }
-        shell_background(jman,args);
+        ret = shell_background(jman,args);
         break;
     case SHEXIT:
-      if(close(pipe_end) == -1){
-        _exit(EXIT_FAILURE);
-      }
-      shell_exit(FALSE,NULL,NULL);
+        ret = shell_exit(FALSE,NULL,NULL);
     case ECHO:
-        if(close(pipe_end) == -1){
-          _exit(EXIT_FAILURE);
-        }
-        shell_echo(jman,args);
+        ret = shell_echo(jman,args);
         break;
     case HELP:
-        if(close(pipe_end) == -1){
-          _exit(EXIT_FAILURE);
-        }
-        shell_help("\r%s\n",args);
+        ret = shell_help("\r%s\n",args);
         break;
     default:
       errno = EINVAL;
       return FALSE;
       break;
+    if(ret)
+	_exit(EXIT_SUCCESS);
+    else
+	return FALSE;
 
   }
 
