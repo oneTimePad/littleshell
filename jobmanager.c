@@ -228,16 +228,31 @@ _BOOL job_ground_change(JMANAGER *jman,int job,_BOOL ground){
     errno = EINVAL;
     return FALSE;
   }
+
+  int i =0;
+  size_t len = strlen(jman->jobnames[job-1]);
+  for(;jman->jobnames[job-1][i]!='\0' && jman->jobnames[job-1][i]!='&';i++);
+  if(ground && jman->jobnames[job-1][i] == '\0'){
+	if(len + 2 > MAX_JOB_NAME)
+		return FALSE;
+	strcat(jman->jobnames[job-1],"&");
+  }
+  else if(!ground && jman->jobnames[job-1][i] == '&'){
+	jman->jobnames[job-1][i] = '\0';
+  }
    
   if(kill(-1*jman->jobpgrids[job-1],SIGCONT) == -1)
     return FALSE;
   jman->suspendedstatus[job-1] = FALSE;
 
- 
+
+   
   if(!ground){
+    
     if(!job_wait_foreground(jman,job))
       return FALSE;
   }
+  
 }
 
 
